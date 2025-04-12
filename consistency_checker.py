@@ -1,6 +1,7 @@
 # consistency_checker.py
 # -*- coding: utf-8 -*-
 from llm_adapters import create_llm_adapter
+import os
 
 # ============== 增加对“剧情要点/未解决冲突”进行检查的可选引导 ==============
 CONSISTENCY_PROMPT = """\
@@ -35,7 +36,9 @@ def check_consistency(
     plot_arcs: str = "",
     interface_format: str = "OpenAI",
     max_tokens: int = 2048,
-    timeout: int = 600
+    timeout: int = 600,
+    filepath: str = None,  # 添加 filepath 参数
+    novel_number: int = 1  # 添加 novel_number 参数
 ) -> str:
     """
     调用模型做简单的一致性检查。可扩展更多提示或校验规则。
@@ -59,14 +62,25 @@ def check_consistency(
         timeout=timeout
     )
 
-    # 调试日志
-    print("\n[ConsistencyChecker] Prompt >>>", prompt)
-
     response = llm_adapter.invoke(prompt)
-    if not response:
-        return "审校Agent无回复"
-    
-    # 调试日志
-    print("[ConsistencyChecker] Response <<<", response)
+    if response and filepath:  # 确保有响应且提供了文件路径
+        # 保存有价值的检查结果
+        if "无明显冲突" not in response:
+            try:
+                plot_arcs_file = os.path.join(filepath, "plot_arcs.txt")
+                if not os.path.exists(plot_arcs_file):
+                    with open(plot_arcs_file, 'w', encoding='utf-8') as f:
+                        f.write("=== 剧情要点与未解决冲突记录 ===\n")
 
+                import re
+                # 清理一下响应文本中可能存在的多余空行
+                cleaned_response = re.sub(r'\n\s*\n+', '\n\n', response.strip())
+                
+                with open(plot_arcs_file, 'a', encoding='utf-8') as f:
+                    f.write(f"\n=== 第{novel_number}章审校记录 ===\n")
+                    f.write(cleaned_response + "\n")
+                    
+            except Exception as e:
+                print(f"保存检查结果失败: {str(e)}")
+    
     return response

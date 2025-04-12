@@ -12,146 +12,154 @@
 # 当前章节摘要生成提示词
 summarize_recent_chapters_prompt = """\
 作为一名专业的小说编辑和知识管理专家，正在基于已完成的前三章内容和本章信息生成当前章节的精准摘要。请严格遵循以下工作流程：
-◆ 输入源：
-  历史文本｜{combined_text}（前3章内容）
-  本章基因｜
-  当前章节信息：
-  ├──第{novel_number}章《{chapter_title}》
-  ├──叙事定位：{chapter_role} 
-  ├──核心功能：{chapter_purpose}
-  ├──转折强度：{plot_twist_level}
-  └──情感谱系：{emotion_evolution}
+前三章内容：
+{combined_text}
 
-◆ 分析框架：
-□ 传承要素：
-  1. 基石设定：<提取前3章必须延续的3个核心元素>
-  2. 动态变量：<识别2个允许调整的辅助元素>
-  
-□ 冲突检测：
-  [!] 硬冲突点：<直接违背前文设定的内容>
-  [?] 待解释点：<需要补充逻辑衔接的内容>
+当前章节信息：
+第{novel_number}章《{chapter_title》：
+├── 本章定位：{chapter_role}
+├── 核心作用：{chapter_purpose}
+├── 悬念类型：{suspense_type}
+├── 情绪演变：{emotion_evolution}
+├── 伏笔操作：{foreshadowing}
+├── 颠覆指数：{plot_twist_level}
+└── 本章简述：{chapter_summary}
 
-□ 未来接口：
-  次章适配｜需预留{next_chapter_foreshadowing}的3个切入点
-  长期伏线｜需保持与{volume_outline}主线70%以上契合度
+下一章信息：
+第{next_chapter_number}章《{next_chapter_title}》：
+├── 章节定位：{next_chapter_role}
+├── 核心作用：{next_chapter_purpose}
+├── 悬念类型：{next_chapter_suspense_type}
+├── 情绪演变：{next_emotion_evolution}
+├── 伏笔操作：{next_chapter_foreshadowing}
+├── 颠覆指数：{next_chapter_plot_twist_level}
+└── 本章简述：{next_chapter_summary}
 
-【生成规范】
-▷ 结构要求：
-  1. 三段式架构：
-    传承段：必须包含<基石设定1>+<动态变量1>
-    演进段：实现{chapter_purpose}核心功能
-    过渡段：为{next_chapter_title}建立2个叙事支点
-  2. 内容密度：
-    - 每100字包含1个前文呼应点
-    - 新元素占比≤30%（按语义单元统计）
+**上下文分析阶段**：
+1. 回顾前三章核心内容：
+   - 第一章核心要素：[章节标题]→[核心冲突/理论]→[关键人物/概念]
+   - 第二章发展路径：[已建立的人物关系]→[技术/情节进展]→[遗留伏笔]
+   - 第三章转折点：[新出现的变量]→[世界观扩展]→[待解决问题]
+2. 提取延续性要素：
+   - 必继承要素：列出前3章中必须延续的3个核心设定
+   - 可调整要素：识别2个允许适度变化的辅助设定
 
-▷ 质量保障：
-  1. 一致性检测：
-    - 与前文关键设定重复率＜40%
-    - 角色行为动机偏差＜15%
-  2. 扩展性检测：
-    - 确保环境设定变化幅度＜世界观兼容阈值
-    - 情感演变符合{emotion_evolution}曲线
+**当前章节摘要生成规则**：
+1. 内容架构：
+   - 继承权重：70%内容需与前3章形成逻辑递进
+   - 创新空间：30%内容可引入新要素，但需标注创新类型（如：技术突破/人物黑化）
+2. 结构控制：
+   - 采用"承继→发展→铺垫"三段式结构
+   - 每段含1个前文呼应点+1个新进展
+3. 预警机制：
+   - 若检测到与前3章设定冲突，用[!]标记并说明
+   - 对开放式发展路径，提供2种合理演化方向
 
-【输出模板】
-当前章节摘要: <
-  采用"传承-演进-过渡"结构：
-  基于<基石设定2>，{characters_involved}面临（核心冲突）→ 
-  通过<动态变量2>实现（关键转折）→ 
-  导致（过渡段结果）并触发{next_chapter_foreshadowing}
-  [!] 需处理：<硬冲突点>
-  可选方向：<路径A>或<路径B>
->
-（严格控制在700-800字，禁用任何格式标记）
+现在请你基于目前故事的进展，完成以下两件事：
+用最多800字，写一个简洁明了的「当前章节摘要」；
+
+请按如下格式输出（不需要额外解释）：
+当前章节摘要: <这里写当前章节摘要>
 """
 
 # 知识库相关性检索提示词
 knowledge_search_prompt = """\
-【智能检索矩阵】
-◆ 输入维度：
-  - 第{novel_number}章《{chapter_title}》
-  - 章节定位：{chapter_role}
-  - 核心目标：{chapter_purpose}（优先级1）
-  - 伏笔需求：{foreshadowing}（优先级2）
-  - 环境参数：{scene_location}（权重0.3）
-  - 角色状态：{character_state}（权重0.2）
-  - 前文摘要：{global_summary}（权重0.1）
+请基于以下当前写作需求，生成合适的知识库检索关键词：
 
-◆ 关键词生成：
-  1. 核心提取：
-    IF {user_guidance}存在 THEN
-      提取指导中的核心概念×3
-    ELSE 
-      从{key_items}提取最具扩展性名词×2
-    
-  2. 维度组合：
-    将核心词与下列属性交叉：
-    - 状态变化（突变/衰减/异化）
-    - 关系模式（传承/背叛/共生）
-    - 时空特征（循环/裂变/沉淀）
-    
-  3. 过滤机制：
-    - 去重：与前3章关键词相似度＞50%自动过滤
-    - 聚焦：保留可作用于{characters_involved}的词汇
+章节元数据：
+- 准备创作：第{chapter_number}章
+- 章节主题：{chapter_title}
+- 核心人物：{characters_involved}
+- 关键道具：{key_items}
+- 场景位置：{scene_location}
 
-【输出规范】
-检索词组：
-1. [核心概念A]+[属性]X（关联强度●●●）
-2. [核心概念B]+[属性Y]（关联强度●●○）
-3. [环境要素]+[状态变化]（关联强度●○○）
-（每组用·分隔，严格3行）
+写作目标：
+- 本章定位：{chapter_role}
+- 核心作用：{chapter_purpose}
+- 伏笔操作：{foreshadowing}
+
+当前摘要：
+{short_summary}
+
+- 用户指导：
+{user_guidance}
+
+- 核心人物(可能未指定)：{characters_involved}
+- 关键道具(可能未指定)：{key_items}
+- 空间坐标(可能未指定)：{scene_location}
+- 时间压力(可能未指定)：{time_constraint}
+
+生成规则：
+
+1.关键词组合逻辑：
+-类型1：[实体]+[属性]（如"量子计算机 故障日志"）
+-类型2：[事件]+[后果]（如"实验室爆炸 辐射泄漏"）
+-类型3：[地点]+[特征]（如"地下城 氧气循环系统"）
+
+2.优先级：
+-首选用户指导中明确提及的术语
+-次选当前章节涉及的核心道具/地点
+-最后补充可能关联的扩展概念
+
+3.过滤机制：
+-排除抽象程度高于"中级"的概念
+-排除与前3章重复率超60%的词汇
+
+请生成3-5组检索词，按优先级降序排列。
+格式：每组用"·"连接2-3个关键词，每组占一行
+
+示例：
+科技公司·数据泄露
+地下实验室·基因编辑·禁忌实验
 """
 
 # 知识库内容过滤提示词
 knowledge_filter_prompt = """\
-【多级内容筛】
-◆ 输入流：
-  {retrieved_texts}
-  
-◆ 过滤流程：
-□ 第一层：基础过滤
-  - 第{novel_number}章《{chapter_title}》
-  - 硬冲突：直接删除与{global_summary}矛盾内容
-  - 软冲突：标记▲需适配{chapter_role}的内容
-  - 重复内容：保留差异度＞60%的部分
+对知识库内容进行三级过滤：
 
-□ 第二层：价值分级
-  ★★★ 核心素材：（权重1.0）
-    - 提供≥2个情节扩展节点
-    - 包含可用于{chapter_purpose}的隐喻原型
-    - 符合{volume_outline}长期发展需求
-  
-  ★★ 优质素材：（权重0.6）
-    - 增强{emotion_evolution}的情感要素
-    - 完善{scene_location}的环境细节
-    - 与{character_state}形成互动
-  
-  ★ 待加工素材：（权重0.3）
-    - 需要实例化到{key_items}的抽象概念
-    - 可用于丰富世界观细节
+待过滤内容：
+{retrieved_texts}
 
-□ 第三层：叙事适配
-  分类存储：
-  [情节引擎]→驱动{chapter_purpose}的核心燃料
-    ★★★素材，部署在章节前1/3
-  
-  [情感催化剂]→强化{emotion_evolution}转折
-    ★★素材，插入情感转折点
-  
-  [环境调色板]→丰富{scene_location}维度
-    ★素材，分散融入场景描写
+当前叙事需求：
+{chapter_info}
 
-【输出格式】
-[分类标签] (价值等级)
-→ 植入位置：<建议章节段落>
-→ 加工要求：<适配修改提示>
-[处理后的内容]
+过滤流程：
+
+冲突检测：
+
+删除与已有摘要重复度＞40%的内容
+
+标记存在世界观矛盾的内容（使用▲前缀）
+
+价值评估：
+
+关键价值点（❗标记）：
+· 提供新的角色关系可能性
+· 包含可转化的隐喻素材
+· 存在至少2个可延伸的细节锚点
+
+次级价值点（·标记）：
+· 补充环境细节
+· 提供技术/流程描述
+
+结构重组：
+
+按"情节燃料/人物维度/世界碎片/叙事技法"分类
+
+为每个分类添加适用场景提示（如"可用于XX类型伏笔"）
+
+输出格式：
+[分类名称]→[适用场景]
+❗/· [内容片段] （▲冲突提示）
+...
 
 示例：
-[情节引擎] (★★★)
-→ 植入位置：本章第二个冲突场景
-→ 加工要求：需关联{characters_involved}的过往经历
-家族徽章暗层发现
+[情节燃料]→可用于时间压力类悬念
+❗ 地下氧气系统剩余23%储量（可制造生存危机）
+▲ 与第三章提到的"永久生态循环系统"存在设定冲突
+
+仅给出最终文本，不要解释任何内容。
+提示词：内容
 """
 
 # =============== 1. 核心种子设定（雪花第1层）===================
@@ -208,7 +216,7 @@ world_building_prompt = """\
 基于以下元素：
 - 主题：{topic}
 - 内容指导：{user_guidance}
-- 核心冲突："{core_seed}"
+- 核心种子："{core_seed}"
 
 为服务上述内容，请构建三维交织的世界观：
 
@@ -317,8 +325,6 @@ chapter_blueprint_prompt = """\
 - 严禁添加示例外的任何文本
 - 禁止解释性内容
 - 禁止脱离大纲的即兴创作
-- 禁用Markdown
-- 禁止在章节名前添加任意符号哦字符
 """
 
 chunked_chapter_blueprint_prompt = """\
@@ -368,8 +374,6 @@ chunked_chapter_blueprint_prompt = """\
 - 严禁添加示例外的任何文本
 - 禁止解释性内容
 - 禁止脱离大纲的即兴创作
-- 禁用Markdown
-- 禁止在章节名前添加任意符号字符
 """
 
 # =============== 6. 前文摘要更新 ===================
@@ -506,124 +510,145 @@ update_character_state_prompt = """\
 
 # 8.1 第一章草稿提示
 first_chapter_draft_prompt = """\
-【世界构建】
-◆ 第{novel_number}章《{chapter_title}》
-◆ 初始锚点：
-  世界观基石｜{novel_setting}
-  分卷大纲｜{volume_outline}
+即将创作：第 {novel_number} 章《{chapter_title}》
+本章定位：{chapter_role}
+核心作用：{chapter_purpose}
+悬念类型：{suspense_type}
+情绪演变：{emotion_evolution}
+伏笔操作：{foreshadowing}
+颠覆指数：{plot_twist_level}
+本章简述：{chapter_summary}
 
-◆ 启动参数：
-  情绪基线｜[情绪演变首阶段] 
-  （要求：情绪演变需用→分隔，如"困惑→觉醒→坚定"）
-  节奏设定｜{suspense_type}×{plot_twist_level}
-  空间维度｜{scene_location}⊗{time_constraint}
+可用元素：
+- 核心人物(可能未指定)：{characters_involved}
+- 关键道具(可能未指定)：{key_items}
+- 空间坐标(可能未指定)：{scene_location}
+- 时间压力(可能未指定)：{time_constraint}
 
-【创世元素】
-□ 世界观锚定： 
-  核心规则｜从小说设定 提取3个最基础法则
-  象征系统｜设计2-3个贯穿全文的意象
-  空间定位｜{scene_location}的三维呈现（物理/社会/心理）
+参考文档：
+- 小说设定：
+{novel_setting}
 
-□ 创生角色：
-  其他角色｜{characters_involved} 
-  特质载体｜{key_items}（赋予30%隐藏属性）
+- 分卷大纲：
+{volume_outline}
 
-□ 原初冲突：
-  本章简述｜{chapter_summary}
-  结构规范：
-  - 必须用→分隔为"起→承"两段式结构
-  - 示例："宴会遇袭→发现密道"
-  冲突深化｜{chapter_purpose}（嵌入在"承"阶段）
+完成第 {novel_number} 章的正文，字数要求{word_number}字，至少设计下方2个或以上具有动态张力的场景：
+1. 对话场景：
+   - 潜台词冲突（表面谈论A，实际博弈B）
+   - 权力关系变化（通过非对称对话长度体现）
 
-□ 规则播种：
-  现世伏笔｜{foreshadowing}（初始强度■■■□）
-  次元预埋｜[分卷核心悬念]（关联度▲△△）
+2. 动作场景：
+   - 环境交互细节（至少3个感官描写）
+   - 节奏控制（短句加速+比喻减速）
+   - 动作揭示人物隐藏特质
 
-【创世法则】
-▷ 叙事基准：
-  1. 遵循{user_guidance}，确立{chapter_role}基调
-  2. 符号密度：1/150字（世界观元素）
-  3. 对话权力差 ≥3:1（长度比）
+3. 心理场景：
+   - 认知失调的具体表现（行为矛盾）
+   - 隐喻系统的运用（连接世界观符号）
+   - 决策前的价值天平描写
 
-▷ 禁忌领域：
-  ✖ 禁止直述：[基础设定列表] 
+4. 环境场景：
+   - 空间透视变化（宏观→微观→异常焦点）
+   - 非常规感官组合（如"听见阳光的重量"）
+   - 动态环境反映心理（环境与人物心理对应）
 
-▷ 创生要求：
-  - 三维动作场景（感官维度≥5）
-  - 价值天平失衡（其他角色）
-  - 环境双重映射（物理+心理）
+格式要求：
+- 仅返回章节正文文本；
+- 不使用分章节小标题；
+- 不要使用markdown格式。
 
-【次元接口】
-⇒ 世界观渗透：2处 小说设定 元素自然融入
-⇒ 悬念初始化：[分卷首个转折点]埋设
-
-生成{word_number}字创世篇章，达成：
-1. {chapter_purpose}（完成度≥80%）
-2. 角色可成长性验证通过
-3. 空间透视转换（宏观→微观→异常）
-4. 动态张力源≥场景数
-
-（纯文本叙事，禁用格式标记）"""
-
+额外指导(可能未指定)：{user_guidance}
+"""
 
 # 8.2 后续章节草稿提示
 next_chapter_draft_prompt = """\
-【创作蓝图】
-◆ 第{novel_number}章《{chapter_title}》
-   章节简述：{chapter_summary}
-   分卷大纲｜{volume_outline}
-◆ 时空锚点：
-  前情提要｜{global_summary}
-  前章收束｜{previous_chapter_excerpt}
+参考文档：
+└── 前文摘要：
+    {global_summary}
 
-◆ 核心参数：
-  情绪曲线｜{emotion_evolution} → {next_emotion_evolution}
-  节奏密度｜{suspense_type}×{plot_twist_level}
-  场景坐标｜{scene_location}@{time_constraint}
+└── 前章结尾段：
+    {previous_chapter_excerpt}
 
-【要素矩阵】
-□ 角色状态：
-  {character_state} 
-  关键交互｜{characters_involved}在{key_items}影响下的{chapter_purpose}
+└── 用户指导：
+    {user_guidance}
 
-□ 情节引擎：
-  核心冲突｜{short_summary} 
-  结构组件要求：
-  - 当前章节须含"起→承→转"三段式发展
-  - 下一章开头需自然承接当前章结尾
-  示例：
-  ✓ 合格结构："谈判破裂→秘密转移→遭遇伏击" 
-  ✗ 不合格结构："多方势力陷入混战"
+└── 角色状态：
+    {character_state}
 
-□ 悬念架构：
-  现章伏笔｜{foreshadowing}（埋设强度：★★★）
-  次章预埋｜{next_chapter_foreshadowing}（关联度：▲▲△）
+└── 当前章节摘要：
+    {short_summary}
 
-【创作约束】
-▷ 叙事准则：
-  1. 采用{user_guidance}风格，{chapter_role}定位
-  2. 每200字包含1处动态描写（动作/环境变化）
-  3. 对话占比控制在30%-40%
+└── 分卷大纲：
+    {volume_outline}
 
-▷ 禁忌边界：
-  ✖ 禁止出现：{global_summary}  中的已解决冲突
-  ✖ 规避重复：{filtered_context}  中的禁忌项
+当前章节信息：
+第{novel_number}章《{chapter_title}》：
+├── 章节定位：{chapter_role}
+├── 核心作用：{chapter_purpose}
+├── 悬念类型：{suspense_type}
+├── 情绪演变：{emotion_evolution}
+├── 伏笔设计：{foreshadowing}
+├── 颠覆指数：{plot_twist_level}
+├── 章节简述：{chapter_summary}
+├── 字数要求：{word_number}字
+├── 核心人物：{characters_involved}
+├── 关键道具：{key_items}
+├── 场景地点：{scene_location}
+└── 时间压力：{time_constraint}
 
-▷ 创新要求：
-  至少运用2种写作技法类知识
-  在{scene_location}场景中创新使用1项 设定资料类 元素
+下一章节目录
+第{next_chapter_number}章《{next_chapter_title}》：
+├── 章节定位：{next_chapter_role}
+├── 核心作用：{next_chapter_purpose}
+├── 悬念类型：{next_chapter_suspense_type}
+├── 情绪演变：{next_emotion_evolution}
+├── 伏笔设计：{next_chapter_foreshadowing}
+├── 颠覆指数：{next_chapter_plot_twist_level}
+└── 章节简述：{next_chapter_summary}
 
-【衔接规范】
-⇒ 前章呼应：需呼应{previous_chapter_excerpt}  中最后3个叙事要素
-⇒ 次章预启：在结尾段自然带出{next_chapter_suspense_type}型悬念
+知识库参考：（按优先级应用）
+{filtered_context}
 
-生成{word_number}字正文，严格遵循：
-1. 当前章节摘要的因果链
-2. 分卷大纲的阶段目标
-3. 角色行为的动机一致性
-4. 环境描写的多感官渗透
+🎯 知识库应用规则：
+1. 内容分级：
+   - 写作技法类（优先）：
+     ▸ 场景构建模板
+     ▸ 对话写作技巧
+     ▸ 悬念营造手法
+   - 设定资料类（选择性）：
+     ▸ 独特世界观元素
+     ▸ 未使用过的技术细节
+   - 禁忌项类（必须规避）：
+     ▸ 已在前文出现过的特定情节
+     ▸ 重复的人物关系发展
 
-（禁用Markdown，纯文本连续书写，段落间空行分隔）
+2. 使用限制：
+   ● 禁止直接复制已有章节的情节模式
+   ● 历史章节内容仅允许：
+     → 参照叙事节奏（不超过20%相似度）
+     → 延续必要的人物反应模式（需改编30%以上）
+   ● 第三方写作知识优先用于：
+     → 增强场景表现力（占知识应用的60%以上）
+     → 创新悬念设计（至少1处新技巧）
+
+3. 冲突检测：
+   ⚠️ 若检测到与历史章节重复：
+     - 相似度>40%：必须重构叙事角度
+     - 相似度20-40%：替换至少3个关键要素
+     - 相似度<20%：允许保留核心概念但改变表现形式
+
+依据前面所有设定，开始完成第 {novel_number} 章的正文，字数要求{word_number}字，
+内容生成严格遵循：
+-用户指导
+-当前章节摘要
+-当前章节信息
+-无逻辑漏洞,
+确保章节内容与前文摘要、前章结尾段衔接流畅、下一章目录保证上下文完整性，
+
+格式要求：
+- 仅返回章节正文文本；
+- 不使用分章节小标题；
+- 不要使用markdown格式。
 """
 # =============== 9. 角色库（分析文本，解析出角色)===================
 Character_Import_Prompt = """\
@@ -857,49 +882,4 @@ final_volume_prompt = """\
     └── 终章：[功能]（世界观终局呈现）
     
 仅返回大纲文本，不要解释任何内容。
-"""
-
-# =============== 11. 章节改写与扩写提示词 ====================
-chapter_rewrite_prompt = """\
-【改写扩写操作台】
-
-◆ 第{novel_number}章《{chapter_title}》
-  字数要求：{word_number}
-  分卷大纲｜{volume_outline}
-
-◆ 改写维度：
-□ 叙事增强：
-  1. 伏笔密度提升：在现有对话中植入{number_of_chapters}处双关隐喻（需关联分卷大纲)
-  2. 感官渗透：在{scene_location}场景增加{emotion_evolution}对应的3类感官细节
-  3. 非线性叙事：插入1段记忆闪回（需使用{key_items}作为触发媒介）
-
-□ 冲突升级：
-  - 强化主要角色的价值观对立（{chapter_purpose}相关）
-  - 将现有冲突拆分为{plot_twist_level}级转折序列
-  - 在环境描写中预埋{next_chapter_foreshadowing}的2处暗示
-
-【操作规范】
-▷ 必须遵守：
-  1. 保持{chapter_role}的叙事视角一致性
-  2. {user_guidance}风格强化（对话/描写比例调整）
-  3. 预留{branch_clues}处分支线索接口
-
-▷ 禁止事项：
-  ✖ 不得更改分卷大纲相关核心设定
-  ✖ 不得破坏主要角色的行为动机链
-  ✖ 不得移除世界观的关键环境要素
-
-【增强包注入】
-⇒ 世界观渗透：
-⇒ 角色弧光：通过习惯性动作强化主要角色人物的特质
-⇒ 悬念维护：确保伏笔的回收进度符合分卷大纲的节点要求
-
-原始草稿｜{raw_draft} 
-
-生成要求：
-1. 保留原始草稿原本正文中70%核心内容
-2. 新增内容需通过{knowledge_filter_prompt}校验
-3. 最终版本必须达成{chapter_purpose}的100%完成度
-
-（输出纯文本扩写版，禁用任何格式标记，不要解释任何内容）
 """

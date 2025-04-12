@@ -1,14 +1,18 @@
 # ui/generation_handlers.py
 # -*- coding: utf-8 -*-
 import os
+import logging
 import threading
 import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 import traceback
 from utils import read_file, save_string_to_txt, clear_file_content
+from llm_adapters import create_llm_adapter  # 添加这一行
+from novel_generator.common import invoke_with_cleaning  # 添加这一行
 from novel_generator import (
     Novel_architecture_generate,
+    Novel_volume_generate,  # 添加导入
     Chapter_blueprint_generate,
     generate_chapter_draft,
     finalize_chapter,
@@ -16,7 +20,14 @@ from novel_generator import (
     clear_vector_store,
     enrich_chapter_text
 )
+from novel_generator.volume import get_current_volume_info  # 添加这一行
+from novel_generator.chapter_blueprint import (
+    analyze_directory_status,
+    analyze_volume_range,
+    find_current_volume
+)
 from consistency_checker import check_consistency
+from novel_generator.rewrite import rewrite_chapter  # 添加导入
 
 def generate_novel_architecture_ui(self):
     filepath = self.filepath_var.get().strip()
@@ -71,16 +82,97 @@ def generate_novel_architecture_ui(self):
     threading.Thread(target=task, daemon=True).start()
 
 def generate_chapter_blueprint_ui(self):
+    """处理生成目录的主UI函数"""
     filepath = self.filepath_var.get().strip()
     if not filepath:
         messagebox.showwarning("警告", "请先选择保存文件路径")
         return
 
-    def task():
-        if not messagebox.askyesno("确认", "确定要生成章节目录吗？"):
-            self.enable_button_safe(self.btn_generate_chapter)
-            return
-        self.disable_button_safe(self.btn_generate_directory)
+    def show_dialog():
+        """显示生成对话框"""
+        try:
+            # 获取当前进度
+            from novel_generator.chapter_blueprint import get_volume_progress
+            current_vol, last_chapter, start_chap, end_chap, is_last = get_volume_progress(filepath)
+            volume_count = self.safe_get_int(self.volume_count_var, 3)
+            
+            dialog = ctk.CTkToplevel(self.master)
+            dialog.title("章节目录生成")
+            dialog.geometry("400x200")
+            dialog.transient(self.master)
+            dialog.grab_set()
+            
+            # 按钮点击处理
+            def handle_button_click(is_single: bool):
+                dialog.destroy()
+                self.disable_button_safe(self.btn_generate_directory)
+                
+                def generation_thread():
+                    try:
+                        next_vol = current_vol + 1 if is_last else current_vol
+                        result = do_generate_blueprint(next_vol, is_single)
+                        
+                        if result:
+                            # 重新检查进度
+                            new_vol, new_chap, _, _, new_is_last = get_volume_progress(filepath)
+                            if new_vol < volume_count or not new_is_last:
+                                self.master.after(1000, show_dialog)
+                    finally:
+                        self.enable_button_safe(self.btn_generate_directory)
+                
+                thread = threading.Thread(target=generation_thread, daemon=True)
+                thread.start()
+
+            # UI组件设置
+            if last_chapter == 0:
+                info_text = "准备生成第一卷章节目录"
+                btn1_text = "生成第一卷章节目录"
+            elif is_last:
+                info_text = f"当前已生成至第{current_vol}卷（已完成，共{end_chap}章）"
+                btn1_text = f"生成第{current_vol + 1}卷章节目录"
+            else:
+                info_text = f"当前进度：第{current_vol}卷 第{last_chapter}章（总计{end_chap}章）"
+                btn1_text = f"继续生成第{current_vol}卷目录"
+
+            info_label = ctk.CTkLabel(
+                dialog,
+                text=f"{info_text}\n请选择生成方式：",
+                font=("Microsoft YaHei", 12)
+            )
+            info_label.pack(pady=20)
+
+            btn_frame = ctk.CTkFrame(dialog)
+            btn_frame.pack(pady=20)
+
+            # 生成按钮
+            ctk.CTkButton(
+                btn_frame,
+                text=btn1_text,
+                command=lambda: handle_button_click(True),
+                font=("Microsoft YaHei", 12)
+            ).pack(pady=5)
+
+            if not is_last or current_vol < volume_count:
+                ctk.CTkButton(
+                    btn_frame,
+                    text="生成所有后续章节目录",
+                    command=lambda: handle_button_click(False),
+                    font=("Microsoft YaHei", 12)
+                ).pack(pady=5)
+
+            ctk.CTkButton(
+                btn_frame,
+                text="退出",
+                command=dialog.destroy,
+                font=("Microsoft YaHei", 12)
+            ).pack(pady=5)
+
+        except Exception as e:
+            self.safe_log(f"❌ 显示章节目录生成对话框时出错: {str(e)}")
+            self.enable_button_safe(self.btn_generate_directory)
+
+    def do_generate_blueprint(start_vol: int, single_mode: bool):
+        """实际执行生成的函数"""
         try:
             interface_format = self.interface_format_var.get().strip()
             api_key = self.api_key_var.get().strip()
@@ -90,10 +182,10 @@ def generate_chapter_blueprint_ui(self):
             temperature = self.temperature_var.get()
             max_tokens = self.max_tokens_var.get()
             timeout_val = self.safe_get_int(self.timeout_var, 600)
-            user_guidance = self.user_guide_text.get("0.0", "end").strip()  # 新增获取用户指导
+            user_guidance = self.user_guide_text.get("0.0", "end").strip()
 
-            self.safe_log("开始生成章节蓝图...")
-            Chapter_blueprint_generate(
+            self.safe_log(f"开始生成{'当前卷' if single_mode else '所有卷'}章节目录...")
+            result = Chapter_blueprint_generate(
                 interface_format=interface_format,
                 api_key=api_key,
                 base_url=base_url,
@@ -103,13 +195,103 @@ def generate_chapter_blueprint_ui(self):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 timeout=timeout_val,
-                user_guidance=user_guidance  # 新增参数
+                user_guidance=user_guidance,
+                start_from_volume=start_vol,
+                generate_single=single_mode
             )
-            self.safe_log("✅ 章节蓝图生成完成。请在 'Chapter Blueprint' 标签页查看或编辑。")
-        except Exception:
-            self.handle_exception("生成章节蓝图时出错")
+            
+            # 检查生成结果
+            if not result:
+                self.safe_log("❌ 章节目录生成失败：未获得有效内容")
+                return False
+                
+            # 验证文件生成
+            directory_file = os.path.join(filepath, "Novel_directory.txt")
+            if not os.path.exists(directory_file):
+                self.safe_log("❌ 章节目录生成失败：未找到目录文件")
+                return False
+                
+            content = read_file(directory_file).strip()
+            if not content:
+                self.safe_log("❌ 章节目录生成失败：目录文件为空")
+                return False
+                
+            self.safe_log("✅ 章节目录生成完成")
+            return True
+            
+        except Exception as e:
+            self.safe_log(f"❌ 生成章节目录时发生错误: {str(e)}")
+            return False
+
+    def main_task():
+        """主任务函数"""
+        try:
+            volume_count = self.safe_get_int(self.volume_count_var, 3)
+            volumes = analyze_volume_range(filepath)
+            
+            if not volumes:
+                messagebox.showwarning("警告", "请先生成分卷大纲")
+                return
+                
+            # 获取当前状态，但不传递参数给show_dialog
+            last_chapter, current_vol, _ = analyze_chapter_status(filepath)
+            show_dialog()  # 修改这里，移除参数
+            
+        except Exception as e:
+            self.safe_log(f"❌ 检查章节目录状态时发生错误: {str(e)}")
+            self.enable_button_safe(self.btn_generate_directory)
+
+    threading.Thread(target=main_task, daemon=True).start()
+
+def generate_blueprint_chapters(self, start_from_volume: int, generate_single: bool):
+    """执行章节目录生成任务"""
+    filepath = self.filepath_var.get().strip()
+    self.disable_button_safe(self.btn_generate_directory)
+    
+    def task():
+        try:
+            interface_format = self.interface_format_var.get().strip()
+            api_key = self.api_key_var.get().strip()
+            base_url = self.base_url_var.get().strip()
+            model_name = self.model_name_var.get().strip()
+            number_of_chapters = self.safe_get_int(self.num_chapters_var, 10)
+            temperature = self.temperature_var.get()
+            max_tokens = self.max_tokens_var.get()
+            timeout_val = self.safe_get_int(self.timeout_var, 600)
+            user_guidance = self.user_guide_text.get("0.0", "end").strip()
+
+            self.safe_log(f"开始生成{'当前卷' if generate_single else '所有卷'}章节目录...")
+            result = Chapter_blueprint_generate(
+                interface_format=interface_format,
+                api_key=api_key,
+                base_url=base_url,
+                llm_model=model_name,
+                number_of_chapters=number_of_chapters,
+                filepath=filepath,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout_val,
+                user_guidance=user_guidance,
+                start_from_volume=start_from_volume,
+                generate_single=generate_single
+            )
+            
+            if result:
+                self.safe_log("✅ 章节目录生成完成")
+                # 检查是否需要继续生成
+                last_chapter, current_vol, is_volume_end = analyze_chapter_status(filepath)
+                volume_count = self.safe_get_int(self.volume_count_var, 3)
+                
+                if current_vol < volume_count and (is_volume_end or not generate_single):
+                    self.master.after(1000, lambda: self.show_blueprint_dialog())
+            else:
+                self.safe_log("❌ 章节目录生成失败")
+
+        except Exception as e:
+            self.safe_log(f"❌ 生成章节目录时发生错误: {str(e)}")
         finally:
             self.enable_button_safe(self.btn_generate_directory)
+
     threading.Thread(target=task, daemon=True).start()
 
 def generate_chapter_draft_ui(self):
@@ -119,6 +301,10 @@ def generate_chapter_draft_ui(self):
         return
 
     def task():
+        # 添加确认对话框
+        if not messagebox.askyesno("确认", "确定要生成章节草稿吗？"):
+            return
+
         self.disable_button_safe(self.btn_generate_chapter)
         try:
             interface_format = self.interface_format_var.get().strip()
@@ -336,24 +522,18 @@ def finalize_chapter_ui(self):
 
             edited_text = self.chapter_result.get("0.0", "end").strip()
 
-            if len(edited_text) < 0.7 * word_number:
-                ask = messagebox.askyesno("字数不足", f"当前章节字数 ({len(edited_text)}) 低于目标字数({word_number})的70%，是否要尝试扩写？")
-                if ask:
-                    self.safe_log("正在扩写章节内容...")
-                    enriched = enrich_chapter_text(
-                        chapter_text=edited_text,
-                        word_number=word_number,
-                        api_key=api_key,
-                        base_url=base_url,
-                        model_name=model_name,
-                        temperature=temperature,
-                        interface_format=interface_format,
-                        max_tokens=max_tokens,
-                        timeout=timeout_val
-                    )
-                    edited_text = enriched
-                    self.master.after(0, lambda: self.chapter_result.delete("0.0", "end"))
-                    self.master.after(0, lambda: self.chapter_result.insert("0.0", edited_text))
+            # 在写入前获取章节信息
+            from chapter_directory_parser import get_chapter_info_from_blueprint
+            directory_file = os.path.join(filepath, "Novel_directory.txt")
+            blueprint_text = read_file(directory_file)
+            chapter_info = get_chapter_info_from_blueprint(blueprint_text, chap_num)
+            if not chapter_info:
+                chapter_info = {
+                    'chapter_purpose': '推进主线',
+                    'foreshadowing': '无特殊伏笔',
+                    'plot_twist_level': 'Lv.1'
+                }
+
             clear_file_content(chapter_file)
             save_string_to_txt(edited_text, chapter_file)
 
@@ -377,6 +557,19 @@ def finalize_chapter_ui(self):
 
             final_text = read_file(chapter_file)
             self.master.after(0, lambda: self.show_chapter_in_textbox(final_text))
+
+            # 如果有重要情节点或冲突，记录到plot_arcs.txt
+            plot_arcs_file = os.path.join(filepath, "plot_arcs.txt")
+            if not os.path.exists(plot_arcs_file):
+                with open(plot_arcs_file, 'w', encoding='utf-8') as f:
+                    f.write("=== 剧情要点与未解决冲突记录 ===\n")
+            
+            with open(plot_arcs_file, 'a', encoding='utf-8') as f:
+                f.write(f"\n=== 第{chap_num}章定稿记录 ===\n")
+                f.write(f"核心功能：{chapter_info.get('chapter_purpose', '')}\n")
+                f.write(f"伏笔设计：{chapter_info.get('foreshadowing', '')}\n")
+                f.write(f"颠覆指数：{chapter_info.get('plot_twist_level', '')}\n")
+
         except Exception:
             self.handle_exception("定稿章节时出错")
         finally:
@@ -421,7 +614,9 @@ def do_consistency_check(self):
                 interface_format=interface_format,
                 max_tokens=max_tokens,
                 timeout=timeout,
-                plot_arcs=""
+                plot_arcs=read_file(os.path.join(filepath, "plot_arcs.txt")),
+                filepath=filepath,  # 添加文件路径
+                novel_number=chap_num  # 添加章节号
             )
             self.safe_log("审校结果：")
             self.safe_log(result)
@@ -521,18 +716,488 @@ def show_plot_arcs_ui(self):
         return
 
     plot_arcs_file = os.path.join(filepath, "plot_arcs.txt")
+    
+    # 尝试创建空文件
     if not os.path.exists(plot_arcs_file):
-        messagebox.showinfo("剧情要点", "当前还未生成任何剧情要点或冲突记录。")
-        return
-
+        try:
+            with open(plot_arcs_file, 'w', encoding='utf-8') as f:
+                f.write("=== 剧情要点与未解决冲突记录 ===\n")
+        except Exception as e:
+            messagebox.showerror("错误", f"创建文件失败: {str(e)}")
+            return
+    
+    # 读取文件内容
     arcs_text = read_file(plot_arcs_file).strip()
-    if not arcs_text:
-        arcs_text = "当前没有记录的剧情要点或冲突。"
+    
+    # 更新显示逻辑
+    if not arcs_text or arcs_text == "=== 剧情要点与未解决冲突记录 ===":
+        arcs_text = "当前没有记录的剧情要点或冲突。\n请先使用一致性审校功能来检查章节。"
 
+    # 创建显示窗口
     top = ctk.CTkToplevel(self.master)
     top.title("剧情要点/未解决冲突")
     top.geometry("600x400")
+    
+    # 添加刷新按钮和文本区
+    btn_frame = ctk.CTkFrame(top)
+    btn_frame.pack(fill="x", padx=10, pady=5)
+    
+    def refresh_content():
+        new_text = read_file(plot_arcs_file).strip()
+        if new_text and new_text != "=== 剧情要点与未解决冲突记录 ===":
+            text_area.configure(state="normal")
+            text_area.delete("0.0", "end")
+            text_area.insert("0.0", new_text)
+            text_area.configure(state="disabled")
+    
+    refresh_btn = ctk.CTkButton(
+        btn_frame, 
+        text="刷新", 
+        command=refresh_content,
+        width=60,
+        font=("Microsoft YaHei", 12)
+    )
+    refresh_btn.pack(side="right")
+    
     text_area = ctk.CTkTextbox(top, wrap="word", font=("Microsoft YaHei", 12))
-    text_area.pack(fill="both", expand=True, padx=10, pady=10)
+    text_area.pack(fill="both", expand=True, padx=10, pady=5)
     text_area.insert("0.0", arcs_text)
     text_area.configure(state="disabled")
+
+def generate_volume_ui(self):
+    """处理生成分卷的UI交互"""
+    filepath = self.filepath_var.get().strip()
+    if not filepath:
+        messagebox.showwarning("警告", "请先选择保存文件路径")
+        return
+
+    def generate_volumes_task(start_from_volume=None, generate_single=False):
+        """单独的生成任务线程"""
+        try:
+            interface_format = self.interface_format_var.get().strip()
+            api_key = self.api_key_var.get().strip()
+            base_url = self.base_url_var.get().strip()
+            model_name = self.model_name_var.get().strip()
+            temperature = self.temperature_var.get()
+            max_tokens = self.max_tokens_var.get()
+            timeout_val = self.safe_get_int(self.timeout_var, 600)
+            topic = self.topic_text.get("0.0", "end").strip()
+            num_chapters = self.safe_get_int(self.num_chapters_var, 10)
+            word_number = self.safe_get_int(self.word_number_var, 3000)
+            user_guidance = self.user_guide_text.get("0.0", "end").strip()
+            characters_involved = self.char_inv_text.get("0.0", "end").strip()
+            volume_count = self.safe_get_int(self.volume_count_var, 3)
+
+            self.safe_log(f"开始生成{'下一卷' if generate_single else '后续所有分卷'} ...")
+            
+            volume_text = Novel_volume_generate(
+                interface_format=interface_format,
+                api_key=api_key,
+                base_url=base_url,
+                llm_model=model_name,
+                topic=topic,
+                filepath=filepath,
+                number_of_chapters=num_chapters,
+                word_number=word_number,
+                volume_count=volume_count,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout_val,
+                user_guidance=user_guidance,
+                characters_involved=characters_involved,
+                start_from_volume=start_from_volume,
+                generate_single=generate_single
+            )
+            
+            # 更新界面显示
+            self.master.after(0, lambda: self.volume_text.delete("0.0", "end"))
+            self.master.after(0, lambda: self.volume_text.insert("0.0", volume_text))
+            self.master.after(0, lambda: self.tabview.set("小说分卷"))
+            
+            if generate_single:
+                # 重新获取分卷信息
+                new_current, new_total, new_remaining = get_current_volume_info(filepath, volume_count)
+                if new_remaining > 0:
+                    self.master.after(100, lambda: show_volume_dialog(new_current, new_remaining))
+                else:
+                    self.safe_log("✅ 所有分卷生成完成")
+            else:
+                self.safe_log("✅ 后续所有分卷生成完成")
+        except Exception as e:
+            self.safe_log(f"❌ 生成分卷时发生错误: {str(e)}")
+        finally:
+            self.enable_button_safe(self.btn_generate_volume)
+
+    def show_volume_dialog(current_vol, remaining_vol):
+        dialog = ctk.CTkToplevel(self.master)
+        dialog.title("分卷生成")
+        dialog.geometry("400x200")
+        dialog.transient(self.master)
+        dialog.grab_set()
+
+        if current_vol > 0:  # 已有分卷的情况
+            info_text = f"当前已生成 {current_vol} 卷，还需生成 {remaining_vol} 卷"
+        else:  # 无分卷的情况
+            info_text = f"准备生成分卷，计划总共 {self.safe_get_int(self.volume_count_var, 3)} 卷"
+
+        info_label = ctk.CTkLabel(
+            dialog,
+            text=f"{info_text}\n请选择生成方式：",
+            font=("Microsoft YaHei", 12)
+        )
+        info_label.pack(pady=20)
+
+        btn_frame = ctk.CTkFrame(dialog)
+        btn_frame.pack(pady=20)
+
+        def on_dialog_choice(choice):
+            dialog.destroy()
+            self.disable_button_safe(self.btn_generate_volume)
+            if choice == "all":
+                threading.Thread(
+                    target=lambda: generate_volumes_task(current_vol + 1 if current_vol > 0 else 0, False),
+                    daemon=True
+                ).start()
+            elif choice == "single":
+                threading.Thread(
+                    target=lambda: generate_volumes_task(current_vol + 1, True),
+                    daemon=True
+                ).start()
+
+        if current_vol > 0:  # 已有分卷时显示不同按钮
+            ctk.CTkButton(
+                btn_frame,
+                text="生成后续所有分卷",
+                command=lambda: on_dialog_choice("all"),
+                font=("Microsoft YaHei", 12)
+            ).pack(pady=5)
+
+            ctk.CTkButton(
+                btn_frame,
+                text="生成下一分卷",
+                command=lambda: on_dialog_choice("single"),
+                font=("Microsoft YaHei", 12)
+            ).pack(pady=5)
+        else:  # 无分卷时显示不同按钮
+            ctk.CTkButton(
+                btn_frame,
+                text="生成第一卷大纲",
+                command=lambda: on_dialog_choice("single"),
+                font=("Microsoft YaHei", 12)
+            ).pack(pady=5)
+
+            ctk.CTkButton(
+                btn_frame,
+                text="生成所有分卷",
+                command=lambda: on_dialog_choice("all"),
+                font=("Microsoft YaHei", 12)
+            ).pack(pady=5)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="退出",
+            command=dialog.destroy,
+            font=("Microsoft YaHei", 12)
+        ).pack(pady=5)
+
+        # 添加对话框关闭事件处理
+        def on_dialog_close():
+            dialog.destroy()
+            self.enable_button_safe(self.btn_generate_volume)  # 重新启用按钮
+
+        dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
+
+    def task():
+        """主任务函数"""
+        self.disable_button_safe(self.btn_generate_volume)
+        try:
+            volume_count = self.safe_get_int(self.volume_count_var, 3)
+            from novel_generator.volume import get_current_volume_info
+            current_volume, total_volumes, remaining_volumes = get_current_volume_info(filepath, volume_count)
+            
+            if current_volume >= volume_count:
+                messagebox.showinfo("提示", "所有分卷已生成完成")
+                self.enable_button_safe(self.btn_generate_volume)
+            else:
+                show_volume_dialog(current_volume, remaining_volumes)
+
+        except Exception as e:
+            self.safe_log(f"❌ 检查分卷状态时发生错误: {str(e)}")
+            self.enable_button_safe(self.btn_generate_volume)
+
+    threading.Thread(target=task, daemon=True).start()
+
+def analyze_chapter_status(filepath: str) -> tuple:
+    """分析当前章节目录的状态
+    返回：(最后章节号, 当前卷号, 是否在卷尾)
+    """
+    try:
+        # 1. 获取最新章节号
+        last_chapter, _, _ = analyze_directory_status(filepath)
+        
+        # 2. 分析分卷范围
+        volumes = analyze_volume_range(filepath)
+        if not volumes:
+            return 0, 1, False
+            
+        # 3. 找到当前章节所在卷
+        if last_chapter == 0:
+            return 0, 1, False
+            
+        current_vol, is_volume_end = find_current_volume(last_chapter, volumes)
+        return last_chapter, current_vol, is_volume_end
+                
+    except Exception as e:
+        logging.error(f"分析章节状态时出错: {str(e)}")
+        return 0, 1, False
+
+def show_blueprint_dialog(self):
+    try:
+        filepath = self.filepath_var.get().strip()
+        
+        last_chapter, current_vol, is_volume_end = analyze_chapter_status(filepath)
+        
+        dialog = ctk.CTkToplevel(self.master)
+        dialog.title("章节目录生成")
+        dialog.geometry("400x200")
+        dialog.transient(self.master)
+        dialog.grab_set()
+        
+        # 根据状态设置显示信息和按钮
+        if last_chapter == 0:
+            info_text = "准备生成第一卷章节目录"
+            btn1_text = "生成第一卷章节目录"
+            next_vol = 1
+        elif is_volume_end:
+            info_text = f"第{current_vol}卷已完成，准备生成第{current_vol + 1}卷"
+            btn1_text = f"生成第{current_vol + 1}卷章节目录"
+            next_vol = current_vol + 1
+        else:
+            info_text = f"继续生成第{current_vol}卷章节目录"
+            btn1_text = f"继续生成第{current_vol}卷目录"
+            next_vol = current_vol
+
+        info_label = ctk.CTkLabel(
+            dialog,
+            text=f"{info_text}\n请选择生成方式：",
+            font=("Microsoft YaHei", 12)
+        )
+        info_label.pack(pady=20)
+
+        btn_frame = ctk.CTkFrame(dialog)
+        btn_frame.pack(pady=20)
+
+        def on_dialog_choice(choice):
+            dialog.destroy()
+            self.disable_button_safe(self.btn_generate_directory)
+            if choice == "all":
+                threading.Thread(
+                    target=lambda: self.generate_blueprints_task(next_vol, False),
+                    daemon=True
+                ).start()
+            elif choice == "single":
+                threading.Thread(
+                    target=lambda: self.generate_blueprints_task(next_vol, True),
+                    daemon=True
+                ).start()
+
+        # 生成按钮
+        ctk.CTkButton(
+            btn_frame,
+            text=btn1_text,
+            command=lambda: on_dialog_choice("single"),
+            font=("Microsoft YaHei", 12)
+        ).pack(pady=5)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="生成所有后续章节目录",
+            command=lambda: on_dialog_choice("all"),
+            font=("Microsoft YaHei", 12)
+        ).pack(pady=5)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="退出",
+            command=dialog.destroy,
+            font=("Microsoft YaHei", 12)
+        ).pack(pady=5)
+    except Exception as e:
+        self.safe_log(f"❌ 显示章节目录生成对话框时出错: {str(e)}")
+        self.enable_button_safe(self.btn_generate_directory)
+
+def generate_blueprints_task(self, start_from_volume: int, generate_single: bool):  # 重命名这里
+    """执行章节目录生成任务"""
+    filepath = self.filepath_var.get().strip()
+    try:
+        self.disable_button_safe(self.btn_generate_directory)
+        interface_format = self.interface_format_var.get().strip()
+        api_key = self.api_key_var.get().strip()
+        base_url = self.base_url_var.get().strip()
+        model_name = self.model_name_var.get().strip()
+        number_of_chapters = self.safe_get_int(self.num_chapters_var, 10)
+        temperature = self.temperature_var.get()
+        max_tokens = self.max_tokens_var.get()
+        timeout_val = self.safe_get_int(self.timeout_var, 600)
+        user_guidance = self.user_guide_text.get("0.0", "end").strip()
+
+        def generate_task():
+            try:
+                self.safe_log(f"开始生成{'当前卷' if generate_single else '所有卷'}章节目录...")
+                result = Chapter_blueprint_generate(
+                    interface_format=interface_format,
+                    api_key=api_key,
+                    base_url=base_url,
+                    llm_model=model_name,
+                    number_of_chapters=number_of_chapters,
+                    filepath=filepath,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    timeout=timeout_val,
+                    user_guidance=user_guidance,
+                    start_from_volume=start_from_volume,
+                    generate_single=generate_single
+                )
+                self.safe_log(f"❌ 生成章节目录时发生错误: {str(e)}")
+            finally:
+                self.enable_button_safe(self.btn_generate_directory)
+
+        # 在新线程中执行生成任务
+        threading.Thread(target=generate_task, daemon=True).start()
+
+    except Exception as e:
+        self.safe_log(f"❌ 启动生成任务时发生错误: {str(e)}")
+        self.enable_button_safe(self.btn_generate_directory)
+
+def rewrite_chapter_ui(self):
+    """处理改写章节的UI交互"""
+    filepath = self.filepath_var.get().strip()
+    if not filepath:
+        messagebox.showwarning("警告", "请先配置保存文件路径。")
+        return
+
+    def task():
+        if not messagebox.askyesno("确认", "确定要改写当前章节吗？"):
+            return
+
+        self.disable_button_safe(self.btn_rewrite_chapter)
+        try:
+            current_text = self.chapter_result.get("0.0", "end").strip()
+            if not current_text:
+                self.safe_log("⚠️ 当前没有可修改的内容。")
+                return
+
+            # 获取基本参数
+            interface_format = self.interface_format_var.get().strip()
+            api_key = self.api_key_var.get().strip()
+            base_url = self.base_url_var.get().strip()
+            model_name = self.model_name_var.get().strip()
+            temperature = self.temperature_var.get()
+            max_tokens = self.max_tokens_var.get()
+            timeout_val = self.safe_get_int(self.timeout_var, 600)
+            chap_num = self.safe_get_int(self.chapter_num_var, 1)
+            word_number = self.safe_get_int(self.word_number_var, 3000)
+            user_guidance = self.user_guide_text.get("0.0", "end").strip()
+
+            # 弹出改写对话框
+            result = {"prompt": None}
+            event = threading.Event()
+
+            def create_dialog():
+                # 构造改写提示词
+                try:
+                    rewritten = rewrite_chapter(
+                        api_key=api_key,
+                        base_url=base_url,
+                        model_name=model_name,
+                        filepath=filepath,
+                        novel_number=chap_num,
+                        word_number=word_number,
+                        temperature=temperature,
+                        interface_format=interface_format,
+                        max_tokens=max_tokens,
+                        timeout=timeout_val,
+                        current_text=current_text,
+                        user_guidance=user_guidance
+                    )
+                    if not rewritten:
+                        self.safe_log("⚠️ 无法生成改写提示词")
+                        event.set()
+                        return
+
+                    dialog = ctk.CTkToplevel(self.master)
+                    dialog.title("改写章节提示词（可编辑）")
+                    dialog.geometry("600x400")
+                    dialog.transient(self.master)
+                    dialog.grab_set()
+
+                    text_box = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 12))
+                    text_box.pack(fill="both", expand=True, padx=10, pady=10)
+                    text_box.insert("0.0", rewritten)
+
+                    # 字数统计标签
+                    wordcount_label = ctk.CTkLabel(dialog, text=f"字数：{len(rewritten)}", font=("Microsoft YaHei", 12))
+                    wordcount_label.pack(side="left", padx=(10,0), pady=5)
+
+                    def update_word_count(event=None):
+                        text = text_box.get("0.0", "end-1c")
+                        text_length = len(text)
+                        wordcount_label.configure(text=f"字数：{text_length}")
+
+                    text_box.bind("<KeyRelease>", update_word_count)
+                    text_box.bind("<ButtonRelease>", update_word_count)
+
+                    button_frame = ctk.CTkFrame(dialog)
+                    button_frame.pack(pady=10)
+
+                    def on_confirm():
+                        result["prompt"] = text_box.get("1.0", "end").strip()
+                        dialog.destroy()
+                        event.set()
+
+                    def on_cancel():
+                        result["prompt"] = None
+                        dialog.destroy()
+                        event.set()
+
+                    btn_confirm = ctk.CTkButton(button_frame, text="确认使用", font=("Microsoft YaHei", 12), command=on_confirm)
+                    btn_confirm.pack(side="left", padx=10)
+                    btn_cancel = ctk.CTkButton(button_frame, text="取消请求", font=("Microsoft YaHei", 12), command=on_cancel)
+                    btn_cancel.pack(side="left", padx=10)
+                    dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+
+                except Exception as e:
+                    self.safe_log(f"创建对话框失败: {str(e)}")
+                    event.set()
+
+            self.master.after(0, create_dialog)
+            event.wait()  
+            edited_prompt = result["prompt"]
+            
+            if edited_prompt:
+                # 使用编辑后的提示词调用LLM生成改写内容
+                llm_adapter = create_llm_adapter(
+                    interface_format=interface_format,
+                    base_url=base_url,
+                    model_name=model_name,
+                    api_key=api_key,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    timeout=timeout_val
+                )
+                rewritten_text = invoke_with_cleaning(llm_adapter, edited_prompt)
+                if rewritten_text:
+                    self.master.after(0, lambda: self.chapter_result.delete("0.0", "end"))
+                    self.master.after(0, lambda: self.chapter_result.insert("0.0", rewritten_text))
+                    self.safe_log("✅ 章节内容已更新")
+                else:
+                    self.safe_log("⚠️ 改写请求未返回有效内容")
+            else:
+                self.safe_log("❌ 用户取消了改写")
+
+        except Exception as e:
+            self.handle_exception(f"改写章节时出错: {str(e)}")
+        finally:
+            self.enable_button_safe(self.btn_rewrite_chapter)
+
+    threading.Thread(target=task, daemon=True).start()

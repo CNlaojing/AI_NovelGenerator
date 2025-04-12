@@ -263,6 +263,8 @@ def load_config_btn(self):
         self.key_items_var.set(other_params.get("key_items", ""))
         self.scene_location_var.set(other_params.get("scene_location", ""))
         self.time_constraint_var.set(other_params.get("time_constraint", ""))
+        if "volume_count" in other_params:  # 添加分卷数的加载
+            self.volume_count_var.set(str(other_params.get("volume_count", 3)))
         self.log("已加载配置。")
     else:
         messagebox.showwarning("提示", "未找到或无法读取配置文件。")
@@ -295,7 +297,8 @@ def save_config_btn(self):
         "characters_involved": self.characters_involved_var.get(),
         "key_items": self.key_items_var.get(),
         "scene_location": self.scene_location_var.get(),
-        "time_constraint": self.time_constraint_var.get()
+        "time_constraint": self.time_constraint_var.get(),
+        "volume_count": self.safe_get_int(self.volume_count_var, 3)  # 添加分卷数
     }
     existing_config = load_config(self.config_file)
     if not existing_config:

@@ -20,19 +20,22 @@ from ui.config_tab import build_config_tabview, load_config_btn, save_config_btn
 from ui.novel_params_tab import build_novel_params_area, build_optional_buttons_area
 from ui.generation_handlers import (
     generate_novel_architecture_ui,
+    generate_volume_ui,  # 添加导入
     generate_chapter_blueprint_ui,
     generate_chapter_draft_ui,
     finalize_chapter_ui,
     do_consistency_check,
     import_knowledge_handler,
     clear_vectorstore_handler,
-    show_plot_arcs_ui
+    show_plot_arcs_ui,
+    rewrite_chapter_ui  # 添加这行
 )
 from ui.setting_tab import build_setting_tab, load_novel_architecture, save_novel_architecture
 from ui.directory_tab import build_directory_tab, load_chapter_blueprint, save_chapter_blueprint
 from ui.character_tab import build_character_tab, load_character_state, save_character_state
 from ui.summary_tab import build_summary_tab, load_global_summary, save_global_summary
 from ui.chapters_tab import build_chapters_tab, refresh_chapters_list, on_chapter_selected, load_chapter_content, save_current_chapter, prev_chapter, next_chapter
+from ui.volume_tab import build_volume_tab, load_volume, save_volume, show_volume_tab
 
 class NovelGeneratorGUI:
     """
@@ -111,6 +114,7 @@ class NovelGeneratorGUI:
             self.scene_location_var = ctk.StringVar(value=op.get("scene_location", ""))
             self.time_constraint_var = ctk.StringVar(value=op.get("time_constraint", ""))
             self.user_guidance_default = op.get("user_guidance", "")
+            self.volume_count_var = ctk.StringVar(value=str(op.get("volume_count", 3)))  # 修改这里
         else:
             self.topic_default = ""
             self.genre_var = ctk.StringVar(value="玄幻")
@@ -123,6 +127,7 @@ class NovelGeneratorGUI:
             self.scene_location_var = ctk.StringVar(value="")
             self.time_constraint_var = ctk.StringVar(value="")
             self.user_guidance_default = ""
+            self.volume_count_var = ctk.StringVar(value="3")  # 添加这里
 
         # --------------- 整体Tab布局 ---------------
         self.tabview = ctk.CTkTabview(self.master)
@@ -134,10 +139,37 @@ class NovelGeneratorGUI:
         build_novel_params_area(self, start_row=1)
         build_optional_buttons_area(self, start_row=2)
         build_setting_tab(self)
+        build_volume_tab(self)
         build_directory_tab(self)
         build_character_tab(self)
         build_summary_tab(self)
         build_chapters_tab(self)
+
+        # 添加新方法绑定
+        from ui.generation_handlers import (
+            generate_novel_architecture_ui,
+            generate_chapter_blueprint_ui,
+            generate_chapter_draft_ui,
+            finalize_chapter_ui,
+            do_consistency_check,
+            import_knowledge_handler,
+            clear_vectorstore_handler,
+            show_plot_arcs_ui,
+            generate_volume_ui,
+            rewrite_chapter_ui  # 添加这行
+        )
+
+        # 绑定生成器处理函数
+        self.generate_novel_architecture_ui = generate_novel_architecture_ui.__get__(self)
+        self.generate_chapter_blueprint_ui = generate_chapter_blueprint_ui.__get__(self)
+        self.generate_chapter_draft_ui = generate_chapter_draft_ui.__get__(self)
+        self.finalize_chapter_ui = finalize_chapter_ui.__get__(self)
+        self.do_consistency_check = do_consistency_check.__get__(self)
+        self.import_knowledge_handler = import_knowledge_handler.__get__(self)
+        self.clear_vectorstore_handler = clear_vectorstore_handler.__get__(self)
+        self.show_plot_arcs_ui = show_plot_arcs_ui.__get__(self)
+        self.generate_volume_ui = generate_volume_ui.__get__(self)
+        self.rewrite_chapter_ui = rewrite_chapter_ui.__get__(self)  # 添加这行
 
     # ----------------- 通用辅助函数 -----------------
     def show_tooltip(self, key: str):
@@ -340,6 +372,7 @@ class NovelGeneratorGUI:
 
     # ----------------- 将导入的各模块函数直接赋给类方法 -----------------
     generate_novel_architecture_ui = generate_novel_architecture_ui
+    generate_volume_ui = generate_volume_ui  # 添加到类方法列表
     generate_chapter_blueprint_ui = generate_chapter_blueprint_ui
     generate_chapter_draft_ui = generate_chapter_draft_ui
     finalize_chapter_ui = finalize_chapter_ui
@@ -365,3 +398,7 @@ class NovelGeneratorGUI:
     test_llm_config = test_llm_config
     test_embedding_config = test_embedding_config
     browse_folder = browse_folder
+    show_volume_tab = show_volume_tab
+    load_volume = load_volume
+    save_volume = save_volume
+    rewrite_chapter_ui = rewrite_chapter_ui  # 添加到类方法列表
