@@ -108,6 +108,7 @@ def Novel_architecture_generate(
     if "character_dynamics_result" not in partial_data:
         logging.info("Step2: Generating character_dynamics_prompt ...")
         prompt_character = character_dynamics_prompt.format(
+            topic=topic,  # 添加主题参数
             core_seed=partial_data["core_seed_result"].strip(),
             user_guidance=user_guidance
         )
@@ -141,6 +142,7 @@ def Novel_architecture_generate(
     if "world_building_result" not in partial_data:
         logging.info("Step3: Generating world_building_prompt ...")
         prompt_world = world_building_prompt.format(
+            topic=topic,  # 添加主题参数
             core_seed=partial_data["core_seed_result"].strip(),
             user_guidance=user_guidance  # 修复：添加用户指导
         )
@@ -157,6 +159,7 @@ def Novel_architecture_generate(
     if "plot_arch_result" not in partial_data:
         logging.info("Step4: Generating plot_architecture_prompt ...")
         prompt_plot = plot_architecture_prompt.format(
+            topic=topic,  # 添加主题参数
             core_seed=partial_data["core_seed_result"].strip(),
             character_dynamics=partial_data["character_dynamics_result"].strip(),
             world_building=partial_data["world_building_result"].strip(),
@@ -195,6 +198,7 @@ def Novel_architecture_generate(
     save_string_to_txt(final_content, arch_file)
     logging.info("Novel_architecture.txt has been generated successfully.")
 
+    # 修复：正确使用 os.path.join 和 os.path.exists
     partial_arch_file = os.path.join(filepath, "partial_architecture.json")
     if os.path.exists(partial_arch_file):
         os.remove(partial_arch_file)
