@@ -27,7 +27,8 @@ from ui.generation_handlers import (
     do_consistency_check,
     import_knowledge_handler,
     clear_vectorstore_handler,
-    show_plot_arcs_ui
+    show_plot_arcs_ui,
+    rewrite_chapter_ui  # 添加这行
 )
 from ui.setting_tab import build_setting_tab, load_novel_architecture, save_novel_architecture
 from ui.directory_tab import build_directory_tab, load_chapter_blueprint, save_chapter_blueprint
@@ -143,6 +144,32 @@ class NovelGeneratorGUI:
         build_character_tab(self)
         build_summary_tab(self)
         build_chapters_tab(self)
+
+        # 添加新方法绑定
+        from ui.generation_handlers import (
+            generate_novel_architecture_ui,
+            generate_chapter_blueprint_ui,
+            generate_chapter_draft_ui,
+            finalize_chapter_ui,
+            do_consistency_check,
+            import_knowledge_handler,
+            clear_vectorstore_handler,
+            show_plot_arcs_ui,
+            generate_volume_ui,
+            rewrite_chapter_ui  # 添加这行
+        )
+
+        # 绑定生成器处理函数
+        self.generate_novel_architecture_ui = generate_novel_architecture_ui.__get__(self)
+        self.generate_chapter_blueprint_ui = generate_chapter_blueprint_ui.__get__(self)
+        self.generate_chapter_draft_ui = generate_chapter_draft_ui.__get__(self)
+        self.finalize_chapter_ui = finalize_chapter_ui.__get__(self)
+        self.do_consistency_check = do_consistency_check.__get__(self)
+        self.import_knowledge_handler = import_knowledge_handler.__get__(self)
+        self.clear_vectorstore_handler = clear_vectorstore_handler.__get__(self)
+        self.show_plot_arcs_ui = show_plot_arcs_ui.__get__(self)
+        self.generate_volume_ui = generate_volume_ui.__get__(self)
+        self.rewrite_chapter_ui = rewrite_chapter_ui.__get__(self)  # 添加这行
 
     # ----------------- 通用辅助函数 -----------------
     def show_tooltip(self, key: str):
@@ -374,3 +401,4 @@ class NovelGeneratorGUI:
     show_volume_tab = show_volume_tab
     load_volume = load_volume
     save_volume = save_volume
+    rewrite_chapter_ui = rewrite_chapter_ui  # 添加到类方法列表

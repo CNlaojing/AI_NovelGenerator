@@ -7,6 +7,8 @@ import logging
 import re
 import time
 import traceback
+import nltk
+import os
 
 def call_with_retry(func, max_retries=3, sleep_time=2, fallback_return=None, **kwargs):
     """
@@ -42,8 +44,23 @@ def debug_log(prompt: str, response_content: str):
         f"\n[######################################### Response #########################################]\n{response_content}\n"
     )
 
+def ensure_nltk_data():
+    """确保NLTK数据可用，如果下载失败则使用备用方案"""
+    try:
+        # 尝试加载punkt分词器
+        nltk.data.find('tokenizers/punkt')
+    except (LookupError, ConnectionError, nltk.exceptions.NLTKDataCorpusError):
+        try:
+            # 如果失败，尝试从本地备用路径加载
+            backup_path = os.path.join(os.path.dirname(__file__), 'data', 'nltk_data')
+            nltk.data.path.append(backup_path)
+            nltk.data.find('tokenizers/punkt')
+        except:
+            logging.warning("无法加载NLTK分词器，将使用基础分词方案")
+
 def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3) -> str:
     """调用 LLM 并清理返回结果"""
+    ensure_nltk_data()
     print("\n" + "="*50)
     print("发送到 LLM 的提示词:")
     print("-"*50)
