@@ -92,10 +92,28 @@ def generate_chapter_blueprint_ui(self):
         """显示生成对话框"""
         try:
             # 获取当前进度
-            from novel_generator.chapter_blueprint import get_volume_progress
-            current_vol, last_chapter, start_chap, end_chap, is_last = get_volume_progress(filepath)
-            volume_count = self.safe_get_int(self.volume_count_var, 3)
+            from novel_generator.chapter_blueprint import get_volume_progress, analyze_volume_range
+            current_vol, last_chapter, start_chap, end_chap, is_last, is_complete = get_volume_progress(filepath)
             
+            volumes = analyze_volume_range(filepath)
+            if not volumes:
+                messagebox.showwarning("警告", "请先生成分卷大纲")
+                return
+                
+            # 获取卷数和已有章节信息
+            volume_count = self.safe_get_int(self.volume_count_var, 3)
+            _, existing_chapters, _ = analyze_directory_status(filepath)
+                
+            # 获取当前卷的总章节数并检查完整性
+            current_vol_info = next((v for v in volumes if v['volume'] == current_vol), None)
+            if not current_vol_info:
+                messagebox.showerror("错误", f"无法获取第{current_vol}卷信息")
+                return
+                
+            total_chapters = current_vol_info['end'] - current_vol_info['start'] + 1
+            completed_chapters = len([x for x in range(current_vol_info['start'], last_chapter + 1) 
+                                   if x in set(existing_chapters)])
+                
             dialog = ctk.CTkToplevel(self.master)
             dialog.title("章节目录生成")
             dialog.geometry("400x200")
@@ -113,8 +131,7 @@ def generate_chapter_blueprint_ui(self):
                         result = do_generate_blueprint(next_vol, is_single)
                         
                         if result:
-                            # 重新检查进度
-                            new_vol, new_chap, _, _, new_is_last = get_volume_progress(filepath)
+                            new_vol, new_chap, _, _, new_is_last, _ = get_volume_progress(filepath)
                             if new_vol < volume_count or not new_is_last:
                                 self.master.after(1000, show_dialog)
                     finally:
@@ -122,17 +139,27 @@ def generate_chapter_blueprint_ui(self):
                 
                 thread = threading.Thread(target=generation_thread, daemon=True)
                 thread.start()
-
-            # UI组件设置
+            
+            # UI组件设置 - 统一处理一次
             if last_chapter == 0:
                 info_text = "准备生成第一卷章节目录"
                 btn1_text = "生成第一卷章节目录"
-            elif is_last:
-                info_text = f"当前已生成至第{current_vol}卷（已完成，共{end_chap}章）"
+                next_vol = 1
+            elif not is_complete:
+                # 当前卷还未完成，继续生成当前卷
+                progress = f"（已生成{completed_chapters}/{total_chapters}章）"
+                info_text = f"当前第{current_vol}卷{progress}\n已生成至第{last_chapter}章"
+                btn1_text = f"继续生成第{current_vol}卷目录"
+                next_vol = current_vol
+            elif is_complete and is_last:
+                # 当前卷已完成，准备生成下一卷
+                info_text = f"第{current_vol}卷已完成，准备生成第{current_vol + 1}卷"
                 btn1_text = f"生成第{current_vol + 1}卷章节目录"
+                next_vol = current_vol + 1
             else:
                 info_text = f"当前进度：第{current_vol}卷 第{last_chapter}章（总计{end_chap}章）"
                 btn1_text = f"继续生成第{current_vol}卷目录"
+                next_vol = current_vol
 
             info_label = ctk.CTkLabel(
                 dialog,
@@ -594,19 +621,12 @@ def do_consistency_check(self):
             timeout = self.timeout_var.get()
 
             chap_num = self.safe_get_int(self.chapter_num_var, 1)
-            chap_file = os.path.join(filepath, "chapters", f"chapter_{chap_num}.txt")
-            chapter_text = read_file(chap_file)
-
-            if not chapter_text.strip():
-                self.safe_log("⚠️ 当前章节文件为空或不存在，无法审校。")
-                return
+            current_text = self.chapter_result.get("0.0", "end").strip()  # 获取编辑框内容
 
             self.safe_log("开始一致性审校...")
             result = check_consistency(
-                novel_setting="",
                 character_state=read_file(os.path.join(filepath, "character_state.txt")),
                 global_summary=read_file(os.path.join(filepath, "global_summary.txt")),
-                chapter_text=chapter_text,
                 api_key=api_key,
                 base_url=base_url,
                 model_name=model_name,
@@ -614,9 +634,9 @@ def do_consistency_check(self):
                 interface_format=interface_format,
                 max_tokens=max_tokens,
                 timeout=timeout,
-                plot_arcs=read_file(os.path.join(filepath, "plot_arcs.txt")),
-                filepath=filepath,  # 添加文件路径
-                novel_number=chap_num  # 添加章节号
+                filepath=filepath,
+                novel_number=chap_num,
+                Review_text=current_text  # 传入编辑框内容
             )
             self.safe_log("审校结果：")
             self.safe_log(result)
@@ -710,59 +730,108 @@ def clear_vectorstore_handler(self):
                 self.log(f"未能清空向量库，请关闭程序后手动删除 {filepath} 下的 vectorstore 文件夹。")
 
 def show_plot_arcs_ui(self):
+    """显示剧情要点窗口"""
+    # 检查是否已存在剧情要点窗口
+    if hasattr(self, '_plot_window') and self._plot_window is not None:
+        try:
+            if self._plot_window.winfo_exists():
+                self._plot_window.focus_force()
+                return
+        except:
+            pass  # 如果窗口已不存在，继续创建新窗口
+    
     filepath = self.filepath_var.get().strip()
     if not filepath:
-        messagebox.showwarning("警告", "请先在主Tab中设置保存文件路径")
+        messagebox.showwarning("警告", "请先配置保存文件路径。")
         return
-
-    plot_arcs_file = os.path.join(filepath, "plot_arcs.txt")
-    
-    # 尝试创建空文件
-    if not os.path.exists(plot_arcs_file):
-        try:
-            with open(plot_arcs_file, 'w', encoding='utf-8') as f:
-                f.write("=== 剧情要点与未解决冲突记录 ===\n")
-        except Exception as e:
-            messagebox.showerror("错误", f"创建文件失败: {str(e)}")
-            return
-    
-    # 读取文件内容
-    arcs_text = read_file(plot_arcs_file).strip()
-    
-    # 更新显示逻辑
-    if not arcs_text or arcs_text == "=== 剧情要点与未解决冲突记录 ===":
-        arcs_text = "当前没有记录的剧情要点或冲突。\n请先使用一致性审校功能来检查章节。"
-
-    # 创建显示窗口
-    top = ctk.CTkToplevel(self.master)
-    top.title("剧情要点/未解决冲突")
-    top.geometry("600x400")
-    
-    # 添加刷新按钮和文本区
-    btn_frame = ctk.CTkFrame(top)
-    btn_frame.pack(fill="x", padx=10, pady=5)
-    
-    def refresh_content():
-        new_text = read_file(plot_arcs_file).strip()
-        if new_text and new_text != "=== 剧情要点与未解决冲突记录 ===":
-            text_area.configure(state="normal")
-            text_area.delete("0.0", "end")
-            text_area.insert("0.0", new_text)
-            text_area.configure(state="disabled")
-    
-    refresh_btn = ctk.CTkButton(
-        btn_frame, 
-        text="刷新", 
-        command=refresh_content,
-        width=60,
-        font=("Microsoft YaHei", 12)
-    )
-    refresh_btn.pack(side="right")
-    
-    text_area = ctk.CTkTextbox(top, wrap="word", font=("Microsoft YaHei", 12))
-    text_area.pack(fill="both", expand=True, padx=10, pady=5)
-    text_area.insert("0.0", arcs_text)
-    text_area.configure(state="disabled")
+        
+    try:
+        plot_arcs_file = os.path.join(filepath, "plot_arcs.txt")
+        content = read_file(plot_arcs_file) if os.path.exists(plot_arcs_file) else ""
+        
+        # 先创建窗口但不显示
+        plot_window = ctk.CTkToplevel(self.master)
+        plot_window.withdraw()  # 先隐藏窗口
+        plot_window.title("剧情要点追踪")
+        plot_window.geometry("800x600")
+        
+        # 设置窗口关闭事件
+        def on_window_close():
+            self._plot_window = None
+            plot_window.destroy()
+            
+        plot_window.protocol("WM_DELETE_WINDOW", on_window_close)
+        
+        # 创建可编辑的文本框
+        text_frame = ctk.CTkFrame(plot_window)
+        text_frame.pack(padx=10, pady=10, fill="both", expand=True)
+        
+        plot_text = ctk.CTkTextbox(text_frame, wrap="word", font=("Microsoft YaHei", 12))
+        plot_text.pack(padx=5, pady=5, fill="both", expand=True)
+        plot_text.insert("1.0", content)
+        
+        # 创建底部按钮框
+        button_frame = ctk.CTkFrame(plot_window)
+        button_frame.pack(padx=10, pady=(0, 10), fill="x")
+        
+        def refresh_content():
+            content = read_file(plot_arcs_file) if os.path.exists(plot_arcs_file) else ""
+            plot_text.delete("1.0", "end")
+            plot_text.insert("1.0", content)
+            
+        def save_content():
+            try:
+                new_content = plot_text.get("1.0", "end-1c")
+                clear_file_content(plot_arcs_file)
+                save_string_to_txt(new_content, plot_arcs_file)
+            except Exception as e:
+                messagebox.showerror("错误", f"保存失败: {str(e)}")
+        
+        # 刷新按钮
+        refresh_btn = ctk.CTkButton(
+            button_frame, 
+            text="刷新", 
+            command=refresh_content,
+            font=("Microsoft YaHei", 12)
+        )
+        refresh_btn.pack(side="left", padx=5)
+        
+        # 保存按钮
+        save_btn = ctk.CTkButton(
+            button_frame, 
+            text="保存", 
+            command=save_content,
+            font=("Microsoft YaHei", 12)
+        )
+        save_btn.pack(side="left", padx=5)
+        
+        # 计算主窗口中心位置
+        self.master.update_idletasks()
+        master_x = self.master.winfo_x()
+        master_y = self.master.winfo_y()
+        master_width = self.master.winfo_width()
+        master_height = self.master.winfo_height()
+        
+        window_width = 800
+        window_height = 600
+        
+        x = master_x + (master_width - window_width) // 2
+        y = master_y + (master_height - window_height) // 4
+        
+        # 在显示窗口前先保存实例引用
+        self._plot_window = plot_window
+        
+        # 设置窗口位置并显示
+        plot_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        plot_window.transient(self.master)  # 设置为主窗口的子窗口
+        plot_window.deiconify()  # 显示窗口
+        plot_window.lift()  # 将窗口提升到顶层
+        plot_window.focus_set()  # 设置焦点
+        
+    except Exception as e:
+        self._plot_window = None
+        self.safe_log(f"显示剧情要点窗口时出错: {str(e)}")
+        messagebox.showerror("错误", str(e))
 
 def generate_volume_ui(self):
     """处理生成分卷的UI交互"""
@@ -835,7 +904,7 @@ def generate_volume_ui(self):
         dialog.transient(self.master)
         dialog.grab_set()
 
-        if current_vol > 0:  # 已有分卷的情况
+        if (current_vol > 0):  # 已有分卷的情况
             info_text = f"当前已生成 {current_vol} 卷，还需生成 {remaining_vol} 卷"
         else:  # 无分卷的情况
             info_text = f"准备生成分卷，计划总共 {self.safe_get_int(self.volume_count_var, 3)} 卷"
@@ -1031,6 +1100,8 @@ def generate_blueprints_task(self, start_from_volume: int, generate_single: bool
     filepath = self.filepath_var.get().strip()
     try:
         self.disable_button_safe(self.btn_generate_directory)
+        # 添加volume_count变量
+        volume_count = self.safe_get_int(self.volume_count_var, 3)
         interface_format = self.interface_format_var.get().strip()
         api_key = self.api_key_var.get().strip()
         base_url = self.base_url_var.get().strip()
