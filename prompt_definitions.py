@@ -961,7 +961,7 @@ chapter_rewrite_prompt = """\
 Chapter_Review_prompt = """\
 - 需审校内容：{Review_text}
 
-请检查需审校内容与下方内容否存在明显冲突或不一致之处，如有请列出：
+请检查需审校内容与下方内容否存在明显冲突或不一致之处，确认伏笔是否已经正确 埋设/触发/待回收/回收，如有请列出：
 
   - 前文摘要：{global_summary}
   - 角色档案：{character_state}
