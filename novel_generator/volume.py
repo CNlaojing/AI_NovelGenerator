@@ -9,6 +9,7 @@ from prompt_definitions import (
     final_volume_prompt
 )
 from utils import read_file, save_string_to_txt, clear_file_content
+import re
 
 def Novel_volume_generate(
     interface_format: str,
@@ -98,64 +99,75 @@ def Novel_volume_generate(
 
     # 生成指定范围的分卷
     for i in range(current_volume, end_volume):
-        logging.info(f"生成第{i+1}卷大纲...")
-        start_chap, end_chap = volume_chapters[i]
-        
-        if i == 0:
-            prompt = volume_outline_prompt.format(
-                topic=topic,
-                user_guidance=user_guidance,
-                novel_setting=novel_setting,
-                character_state=character_state,
-                characters_involved=characters_involved,
-                number_of_chapters=number_of_chapters,
-                word_number=word_number,
-                x=start_chap,
-                y=end_chap
-            )
-        elif i == volume_count - 1:
-            prompt = final_volume_prompt.format(
-                topic=topic,
-                user_guidance=user_guidance,
-                novel_setting=novel_setting,
-                character_state=character_state,
-                characters_involved=characters_involved,
-                previous_volume_outline=previous_outline,
-                number_of_chapters=number_of_chapters,
-                word_number=word_number,
-                x=start_chap
-            )
-        else:
-            prompt = subsequent_volume_prompt.format(
-                topic=topic,
-                user_guidance=user_guidance,
-                novel_setting=novel_setting,
-                character_state=character_state,
-                characters_involved=characters_involved,
-                previous_volume_outline=previous_outline,
-                number_of_chapters=number_of_chapters,
-                word_number=word_number,
-                volume_number=i+1,
-                x=start_chap,
-                y=end_chap
-            )
+        try:
+            logging.info(f"生成第{i+1}卷大纲...")
+            start_chap, end_chap = volume_chapters[i]
 
-        outline = invoke_with_cleaning(llm_adapter, prompt)
-        if not outline.strip():
-            raise Exception(f"第{i+1}卷大纲生成失败")
+            # 构造提示词根据卷号
+            if i == 0:
+                prompt = volume_outline_prompt.format(
+                    topic=topic,
+                    user_guidance=user_guidance,
+                    novel_setting=novel_setting,
+                    character_state=character_state,
+                    characters_involved=characters_involved,
+                    number_of_chapters=number_of_chapters,
+                    word_number=word_number,
+                    x=start_chap,
+                    y=end_chap
+                )
+            elif i == volume_count - 1:
+                prompt = final_volume_prompt.format(
+                    topic=topic,
+                    user_guidance=user_guidance,
+                    novel_setting=novel_setting,
+                    character_state=character_state,
+                    characters_involved=characters_involved,
+                    previous_volume_outline=previous_outline,
+                    number_of_chapters=number_of_chapters,
+                    word_number=word_number,
+                    x=start_chap
+                )
+            else:
+                prompt = subsequent_volume_prompt.format(
+                    topic=topic,
+                    user_guidance=user_guidance,
+                    novel_setting=novel_setting,
+                    character_state=character_state,
+                    characters_involved=characters_involved,
+                    previous_volume_outline=previous_outline,
+                    number_of_chapters=number_of_chapters,
+                    word_number=word_number,
+                    volume_number=i+1,
+                    x=start_chap,
+                    y=end_chap
+                )
 
-        volume_title = "终章" if i == volume_count - 1 else ""
-        new_volume = f"#=== 第{i+1}卷{volume_title}  第{start_chap}章 至 第{end_chap}章 ===\n{outline}"
-        volume_outlines.append(new_volume)
-        previous_outline = outline
+            outline = invoke_with_cleaning(llm_adapter, prompt)
+            if not outline.strip():
+                raise Exception(f"第{i+1}卷大纲生成失败")
 
-    # 合并并保存所有分卷内容
-    complete_volume_text = "\n\n".join(volume_outlines) + "\n"
-    clear_file_content(volume_file)
-    save_string_to_txt(complete_volume_text, volume_file)
+            volume_title = "终章" if i == volume_count - 1 else ""
+            new_volume = f"#=== 第{i+1}卷{volume_title}  第{start_chap}章 至 第{end_chap}章 ===\n{outline}"
+            volume_outlines.append(new_volume)
+            previous_outline = outline
+
+            # 每生成一卷就保存一次
+            current_content = "\n\n".join(volume_outlines) + "\n"
+            clear_file_content(volume_file)
+            save_string_to_txt(current_content, volume_file)
+            logging.info(f"第{i+1}卷大纲已生成并保存")
+
+        except Exception as e:
+            logging.error(f"生成第{i+1}卷大纲时出错: {str(e)}")
+            # 保存已生成的内容
+            if volume_outlines:
+                current_content = "\n\n".join(volume_outlines) + "\n"
+                clear_file_content(volume_file)
+                save_string_to_txt(current_content, volume_file)
+            raise
     
-    # 返回生成结果
-    return complete_volume_text
+    return "\n\n".join(volume_outlines) + "\n"
 
 def get_current_volume_info(filepath: str, volume_count: int) -> tuple:
     """获取当前分卷信息
@@ -178,3 +190,16 @@ def get_current_volume_info(filepath: str, volume_count: int) -> tuple:
     
     remaining_volumes = volume_count - current_volume
     return current_volume, volume_count, remaining_volumes
+
+def extract_volume_outline(content: str, volume_number: int) -> str:
+    """从完整的分卷大纲中提取指定卷的内容"""
+    try:
+        # 匹配以 #=== 第N卷 开始，到下一个 #=== 第N卷 或文件结尾的内容
+        pattern = rf"#=== 第{volume_number}卷.*?(?=#=== 第\d+卷|$)"
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            return match.group(0).strip()
+        return ""
+    except Exception as e:
+        logging.error(f"提取分卷大纲时出错: {str(e)}")
+        return ""

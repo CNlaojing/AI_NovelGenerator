@@ -370,6 +370,9 @@ class NovelGeneratorGUI:
         
         self._role_lib = RoleLibrary(self.master, save_path, llm_adapter)  # 新增参数
 
+    # 删除重复的show_plot_arcs_ui函数实现,只保留函数引用
+    show_plot_arcs_ui = show_plot_arcs_ui
+
     # ----------------- 将导入的各模块函数直接赋给类方法 -----------------
     generate_novel_architecture_ui = generate_novel_architecture_ui
     generate_volume_ui = generate_volume_ui  # 添加到类方法列表
