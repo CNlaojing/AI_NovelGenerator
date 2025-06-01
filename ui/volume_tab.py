@@ -22,7 +22,7 @@ def build_volume_tab(self):
 
     load_btn = ctk.CTkButton(
         top_frame, 
-        text="导入分卷", 
+        text="加载 分卷大纲.txt", 
         command=self.load_volume,
         font=("Microsoft YaHei", 12)
     )
@@ -67,13 +67,13 @@ def load_volume(self):
         messagebox.showwarning("警告", "请先设置保存路径")
         return
     
-    volume_file = os.path.join(filepath, "Novel_Volume.txt")
+    volume_file = os.path.join(filepath, "分卷大纲.txt")
     if os.path.exists(volume_file):
         content = read_file(volume_file)
         self.volume_text.delete("0.0", "end")
         self.volume_text.insert("0.0", content)
     else:
-        messagebox.showwarning("警告", "Novel_Volume.txt 文件不存在")
+        messagebox.showwarning("警告", "分卷大纲.txt 文件不存在")
 
 def save_volume(self):
     """保存分卷内容"""
@@ -82,7 +82,7 @@ def save_volume(self):
         messagebox.showwarning("警告", "请先设置保存路径")
         return
 
-    volume_file = os.path.join(filepath, "Novel_Volume.txt")
+    volume_file = os.path.join(filepath, "分卷大纲.txt")
     content = self.volume_text.get("0.0", "end").strip()
     clear_file_content(volume_file)
     save_string_to_txt(content, volume_file)

@@ -25,14 +25,14 @@ from ui.generation_handlers import (
     generate_chapter_draft_ui,
     finalize_chapter_ui,
     do_consistency_check,
-    import_knowledge_handler,
-    clear_vectorstore_handler,
     show_plot_arcs_ui,
-    rewrite_chapter_ui  # 添加这行
+    rewrite_chapter_ui,  # 添加这行
+    show_rewrite_prompt_editor, # 添加这行
+    execute_chapter_rewrite # 添加这行
 )
 from ui.setting_tab import build_setting_tab, load_novel_architecture, save_novel_architecture
-from ui.directory_tab import build_directory_tab, load_chapter_blueprint, save_chapter_blueprint
-from ui.character_tab import build_character_tab, load_character_state, save_character_state
+from ui.directory_tab import build_directory_tab, load_chapter_blueprint, save_chapter_blueprint, load_text_file
+from ui.character_tab import build_character_tab, load_character_file, load_character_state, save_character_state
 from ui.summary_tab import build_summary_tab, load_global_summary, save_global_summary
 from ui.chapters_tab import build_chapters_tab, refresh_chapters_list, on_chapter_selected, load_chapter_content, save_current_chapter, prev_chapter, next_chapter
 from ui.volume_tab import build_volume_tab, load_volume, save_volume, show_volume_tab
@@ -45,8 +45,16 @@ class NovelGeneratorGUI:
         self.master = master
         self.master.title("Novel Generator GUI")
         try:
+            # 使用 stderr 重定向来捕获 libpng 警告
+            import sys
+            import os
+            stderr = sys.stderr
+            null = open(os.devnull, 'w')
+            sys.stderr = null
             if os.path.exists("icon.ico"):
                 self.master.iconbitmap("icon.ico")
+            sys.stderr = stderr
+            null.close()
         except Exception:
             pass
         self.master.geometry("1350x840")
@@ -115,6 +123,20 @@ class NovelGeneratorGUI:
             self.time_constraint_var = ctk.StringVar(value=op.get("time_constraint", ""))
             self.user_guidance_default = op.get("user_guidance", "")
             self.volume_count_var = ctk.StringVar(value=str(op.get("volume_count", 3)))  # 修改这里
+            # 初始化缺失的 StringVar
+            self.topic_var = ctk.StringVar(value=self.topic_default)
+            # 尝试加载角色状态文件
+            character_state_content = ""
+            filepath = op.get("filepath", "")
+            if filepath and os.path.isdir(filepath):
+                char_state_file = os.path.join(filepath, "待用角色.txt")
+                if os.path.exists(char_state_file):
+                    try:
+                        character_state_content = read_file(char_state_file)
+                    except Exception as e:
+                        logging.warning(f"无法读取角色状态文件 {char_state_file}: {e}")
+            self.character_state_var = ctk.StringVar(value=character_state_content)
+            self.user_guidance_var = ctk.StringVar(value=self.user_guidance_default)
         else:
             self.topic_default = ""
             self.genre_var = ctk.StringVar(value="玄幻")
@@ -128,6 +150,20 @@ class NovelGeneratorGUI:
             self.time_constraint_var = ctk.StringVar(value="")
             self.user_guidance_default = ""
             self.volume_count_var = ctk.StringVar(value="3")  # 添加这里
+            # 初始化缺失的 StringVar (else 分支)
+            self.topic_var = ctk.StringVar(value=self.topic_default)
+            # 尝试加载角色状态文件 (else 分支)
+            character_state_content = ""
+            filepath = self.filepath_var.get() # 从StringVar获取路径
+            if filepath and os.path.isdir(filepath):
+                char_state_file = os.path.join(filepath, "待用角色.txt")
+                if os.path.exists(char_state_file):
+                    try:
+                        character_state_content = read_file(char_state_file)
+                    except Exception as e:
+                        logging.warning(f"无法读取角色状态文件 {char_state_file}: {e}")
+            self.character_state_var = ctk.StringVar(value=character_state_content)
+            self.user_guidance_var = ctk.StringVar(value=self.user_guidance_default)
 
         # --------------- 整体Tab布局 ---------------
         self.tabview = ctk.CTkTabview(self.master)
@@ -156,7 +192,9 @@ class NovelGeneratorGUI:
             clear_vectorstore_handler,
             show_plot_arcs_ui,
             generate_volume_ui,
-            rewrite_chapter_ui  # 添加这行
+            rewrite_chapter_ui,  # 添加这行
+            show_rewrite_prompt_editor,  # 添加这行
+            execute_chapter_rewrite  # 添加这行
         )
 
         # 绑定生成器处理函数
@@ -165,11 +203,14 @@ class NovelGeneratorGUI:
         self.generate_chapter_draft_ui = generate_chapter_draft_ui.__get__(self)
         self.finalize_chapter_ui = finalize_chapter_ui.__get__(self)
         self.do_consistency_check = do_consistency_check.__get__(self)
-        self.import_knowledge_handler = import_knowledge_handler.__get__(self)
-        self.clear_vectorstore_handler = clear_vectorstore_handler.__get__(self)
         self.show_plot_arcs_ui = show_plot_arcs_ui.__get__(self)
         self.generate_volume_ui = generate_volume_ui.__get__(self)
         self.rewrite_chapter_ui = rewrite_chapter_ui.__get__(self)  # 添加这行
+        self.show_rewrite_prompt_editor = show_rewrite_prompt_editor.__get__(self) # 添加这行
+        self.execute_chapter_rewrite = execute_chapter_rewrite.__get__(self) # 添加这行
+        self.load_chapter_blueprint = load_chapter_blueprint.__get__(self)
+        self.save_chapter_blueprint = save_chapter_blueprint.__get__(self)
+        self.load_text_file = load_text_file.__get__(self)  # 添加这一行
 
     # ----------------- 通用辅助函数 -----------------
     def show_tooltip(self, key: str):
@@ -253,7 +294,7 @@ class NovelGeneratorGUI:
     
     def browse_folder(self):
         selected_dir = filedialog.askdirectory()
-        if selected_dir:
+        if (selected_dir):
             self.filepath_var.set(selected_dir)
 
     def show_character_import_window(self):
@@ -337,6 +378,9 @@ class NovelGeneratorGUI:
             selected = [name for chk, name in self.selected_roles if chk.get() == 1]
             self.char_inv_text.delete("0.0", "end")
             self.char_inv_text.insert("0.0", ", ".join(selected))
+            # 更新characters_involved_var变量
+            if hasattr(self, 'characters_involved_var'):
+                self.characters_involved_var.set(", ".join(selected))
             import_window.destroy()
             
         btn_confirm = ctk.CTkButton(btn_frame, text="选择", command=confirm_selection)
@@ -380,8 +424,6 @@ class NovelGeneratorGUI:
     generate_chapter_draft_ui = generate_chapter_draft_ui
     finalize_chapter_ui = finalize_chapter_ui
     do_consistency_check = do_consistency_check
-    import_knowledge_handler = import_knowledge_handler
-    clear_vectorstore_handler = clear_vectorstore_handler
     show_plot_arcs_ui = show_plot_arcs_ui
     load_config_btn = load_config_btn
     save_config_btn = save_config_btn
@@ -389,6 +431,7 @@ class NovelGeneratorGUI:
     save_novel_architecture = save_novel_architecture
     load_chapter_blueprint = load_chapter_blueprint
     save_chapter_blueprint = save_chapter_blueprint
+    load_character_file = load_character_file  # 新增这行
     load_character_state = load_character_state
     save_character_state = save_character_state
     load_global_summary = load_global_summary
@@ -404,4 +447,5 @@ class NovelGeneratorGUI:
     show_volume_tab = show_volume_tab
     load_volume = load_volume
     save_volume = save_volume
-    rewrite_chapter_ui = rewrite_chapter_ui  # 添加到类方法列表
+    rewrite_chapter_ui = rewrite_chapter_ui
+    execute_chapter_rewrite = execute_chapter_rewrite  # 添加这行  # 添加到类方法列表

@@ -3,15 +3,19 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from ui.context_menu import TextWidgetContextMenu
+import os
+import json
+import logging
+import tkinter as tk
 
 def build_main_tab(self):
     """
-    主Tab包含左侧的"本章内容"编辑框和输出日志，以及右侧的主要操作和参数设置区
+    主Tab包含左侧的"内容编辑框"编辑框和输出日志，以及右侧的主要操作和参数设置区
     """
     self.main_tab = self.tabview.add("主界面")
     self.main_tab.rowconfigure(0, weight=1)
     self.main_tab.columnconfigure(0, weight=1)
-    self.main_tab.columnconfigure(1, weight=0)
+    self.main_tab.columnconfigure(1, weight=1)
 
     self.left_frame = ctk.CTkFrame(self.main_tab)
     self.left_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
@@ -24,7 +28,7 @@ def build_main_tab(self):
 
 def build_left_layout(self):
     """
-    左侧区域：本章内容(可编辑) + Step流程按钮 + 输出日志(只读)
+    左侧区域：内容编辑框 + Step流程按钮 + 输出日志(只读)
     """
     self.left_frame.grid_rowconfigure(0, weight=0)
     self.left_frame.grid_rowconfigure(1, weight=2)
@@ -33,7 +37,7 @@ def build_left_layout(self):
     self.left_frame.grid_rowconfigure(4, weight=1)
     self.left_frame.columnconfigure(0, weight=1)
 
-    self.chapter_label = ctk.CTkLabel(self.left_frame, text="本章内容（可编辑）  字数：0", font=("Microsoft YaHei", 12))
+    self.chapter_label = ctk.CTkLabel(self.left_frame, text="内容编辑框  字数：0", font=("Microsoft YaHei", 12))
     self.chapter_label.grid(row=0, column=0, padx=5, pady=(5, 0), sticky="w")
 
     # 章节文本编辑框
@@ -46,7 +50,7 @@ def build_left_layout(self):
     def update_word_count(event=None):
         text = self.chapter_result.get("0.0", "end")
         count = len(text) - 1  # 减去最后一个换行符
-        self.chapter_label.configure(text=f"本章内容（可编辑）  字数：{count}")
+        self.chapter_label.configure(text=f"内容编辑框  字数：{count}")
 
     self.chapter_result.bind("<KeyRelease>", update_word_count)
     self.chapter_result.bind("<ButtonRelease>", update_word_count)
@@ -58,7 +62,7 @@ def build_left_layout(self):
 
     self.btn_generate_architecture = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step1. 生成架构",
+        text="生成架构",
         command=self.generate_novel_architecture_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -66,7 +70,7 @@ def build_left_layout(self):
 
     self.btn_generate_volume = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step2. 生成分卷",
+        text="生成分卷",
         command=self.generate_volume_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -74,7 +78,7 @@ def build_left_layout(self):
 
     self.btn_generate_directory = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step3. 生成目录", 
+        text="生成目录", 
         command=self.generate_chapter_blueprint_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -82,7 +86,7 @@ def build_left_layout(self):
 
     self.btn_generate_chapter = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step4. 生成草稿",  
+        text="生成草稿",  
         command=self.generate_chapter_draft_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -90,7 +94,7 @@ def build_left_layout(self):
 
     self.btn_rewrite_chapter = ctk.CTkButton(
         self.step_buttons_frame, 
-        text="Step5. 改写章节",
+        text="改写章节",
         command=self.rewrite_chapter_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -98,7 +102,7 @@ def build_left_layout(self):
 
     self.btn_finalize_chapter = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step6. 定稿章节",  
+        text="定稿章节",  
         command=self.finalize_chapter_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -127,3 +131,22 @@ def build_right_layout(self):
     self.config_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
     self.config_frame.columnconfigure(0, weight=1)
     # 其余部分将在 config_tab.py 与 novel_params_tab.py 中构建
+
+def init_ui(self):
+    try:
+        # 读取配置文件中的章节号
+        config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+        current_chapter = 1  # 默认值
+        
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                current_chapter = config.get('novel_params', {}).get('current_chapter', 1)
+            except Exception as e:
+                logging.error(f"读取配置文件时出错: {str(e)}")
+        
+        # 初始化章节号输入框
+        self.chapter_var = tk.StringVar(value=str(current_chapter))
+    except Exception as e:
+        logging.error(f"初始化UI时出错: {str(e)}")

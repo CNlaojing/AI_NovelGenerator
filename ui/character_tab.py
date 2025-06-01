@@ -12,8 +12,36 @@ def build_character_tab(self):
     self.character_tab.rowconfigure(1, weight=1)
     self.character_tab.columnconfigure(0, weight=1)
 
-    load_btn = ctk.CTkButton(self.character_tab, text="加载 character_state.txt", command=self.load_character_state, font=("Microsoft YaHei", 12))
-    load_btn.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+    # 创建按钮框架来容纳两个加载按钮
+    btn_frame = ctk.CTkFrame(self.character_tab)
+    btn_frame.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+
+    # 加载角色状态.txt按钮
+    load_state_btn = ctk.CTkButton(
+        btn_frame, 
+        text="加载 角色状态.txt", 
+        command=lambda: self.load_character_file("角色状态.txt"), 
+        font=("Microsoft YaHei", 12)
+    )
+    load_state_btn.pack(side="left", padx=(0,5))
+
+    # 加载待用角色.txt按钮
+    load_standby_btn = ctk.CTkButton(
+        btn_frame, 
+        text="加载 待用角色.txt", 
+        command=lambda: self.load_character_file("待用角色.txt"), 
+        font=("Microsoft YaHei", 12)
+    )
+    load_standby_btn.pack(side="left", padx=(0,5))
+    
+    # 加载角色数据库.txt按钮
+    load_all_chars_btn = ctk.CTkButton(
+        btn_frame, 
+        text="加载 角色数据库.txt", 
+        command=lambda: self.load_character_file("角色数据库.txt"), 
+        font=("Microsoft YaHei", 12)
+    )
+    load_all_chars_btn.pack(side="left", padx=0)
 
     self.character_wordcount_label = ctk.CTkLabel(self.character_tab, text="字数：0", font=("Microsoft YaHei", 12))
     self.character_wordcount_label.grid(row=0, column=1, padx=5, pady=5, sticky="w")
@@ -33,24 +61,36 @@ def build_character_tab(self):
     TextWidgetContextMenu(self.character_text)
     self.character_text.grid(row=1, column=0, sticky="nsew", padx=5, pady=5, columnspan=3)
 
-def load_character_state(self):
+def load_character_file(self, filename):
+    """统一的文件加载函数"""
     filepath = self.filepath_var.get().strip()
     if not filepath:
         messagebox.showwarning("警告", "请先设置保存文件路径")
         return
-    filename = os.path.join(filepath, "character_state.txt")
-    content = read_file(filename)
+    file_path = os.path.join(filepath, filename)
+    content = read_file(file_path)
     self.character_text.delete("0.0", "end")
     self.character_text.insert("0.0", content)
-    self.log("已加载 character_state.txt 到编辑区。")
+    self.current_file = filename  # 记录当前加载的文件名
+    self.log(f"已加载 {filename} 到编辑区。")
+
+def load_character_state(self):
+    """保持向后兼容的函数"""
+    self.load_character_file("待用角色.txt")
 
 def save_character_state(self):
+    """保存角色状态文件"""
     filepath = self.filepath_var.get().strip()
     if not filepath:
         messagebox.showwarning("警告", "请先设置保存文件路径")
         return
     content = self.character_text.get("0.0", "end").strip()
-    filename = os.path.join(filepath, "character_state.txt")
-    clear_file_content(filename)
-    save_string_to_txt(content, filename)
-    self.log("已保存对 character_state.txt 的修改。")
+    
+    # 获取当前编辑的是哪个文件
+    current_file = getattr(self, 'current_file', '待用角色.txt')
+    file_path = os.path.join(filepath, current_file)
+    
+    # 保存到对应文件
+    clear_file_content(file_path)
+    save_string_to_txt(content, file_path)
+    self.log(f"已保存对 {current_file} 的修改。")

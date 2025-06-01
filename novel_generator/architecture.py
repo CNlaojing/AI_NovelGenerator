@@ -13,8 +13,7 @@ from prompt_definitions import (
     core_seed_prompt,
     character_dynamics_prompt,
     world_building_prompt,
-    plot_architecture_prompt,
-    create_character_state_prompt
+    plot_architecture_prompt
 )
 from utils import clear_file_content, save_string_to_txt
 
@@ -68,11 +67,11 @@ def Novel_architecture_generate(
       4. plot_architecture_prompt
     若在中间任何一步报错且重试多次失败，则将已经生成的内容写入 partial_architecture.json 并退出；
     下次调用时可从该步骤继续。
-    最终输出 Novel_architecture.txt
+    最终输出 小说设定.txt
 
-    新增：
-    - 在完成角色动力学设定后，依据该角色体系，使用 create_character_state_prompt 生成初始角色状态表，
-      并存储到 character_state.txt，后续维护更新。
+    依次调用核心种子、角色动力学、世界观和三幕式情节架构生成小说设定。
+    若在中间任何一步报错且重试多次失败，则将已经生成的内容写入 partial_architecture.json 并退出；
+    下次调用时可从该步骤继续。
     """
     os.makedirs(filepath, exist_ok=True)
     partial_data = load_partial_architecture_data(filepath)
@@ -103,7 +102,7 @@ def Novel_architecture_generate(
         partial_data["core_seed_result"] = core_seed_result
         save_partial_architecture_data(filepath, partial_data)
     else:
-        logging.info("Step1 already done. Skipping...")
+        logging.info("生成架构 already done. Skipping...")
     # Step2: 角色动力学
     if "character_dynamics_result" not in partial_data:
         logging.info("Step2: Generating character_dynamics_prompt ...")
@@ -121,23 +120,7 @@ def Novel_architecture_generate(
         save_partial_architecture_data(filepath, partial_data)
     else:
         logging.info("Step2 already done. Skipping...")
-    # 生成初始角色状态
-    if "character_dynamics_result" in partial_data and "character_state_result" not in partial_data:
-        logging.info("Generating initial character state from character dynamics ...")
-        prompt_char_state_init = create_character_state_prompt.format(
-            character_dynamics=partial_data["character_dynamics_result"].strip()
-        )
-        character_state_init = invoke_with_cleaning(llm_adapter, prompt_char_state_init)
-        if not character_state_init.strip():
-            logging.warning("create_character_state_prompt generation failed.")
-            save_partial_architecture_data(filepath, partial_data)
-            return
-        partial_data["character_state_result"] = character_state_init
-        character_state_file = os.path.join(filepath, "character_state.txt")
-        clear_file_content(character_state_file)
-        save_string_to_txt(character_state_init, character_state_file)
-        save_partial_architecture_data(filepath, partial_data)
-        logging.info("Initial character state created and saved.")
+
     # Step3: 世界观
     if "world_building_result" not in partial_data:
         logging.info("Step3: Generating world_building_prompt ...")
@@ -193,13 +176,18 @@ def Novel_architecture_generate(
         f"{plot_arch_result}\n"
     )
 
-    arch_file = os.path.join(filepath, "Novel_architecture.txt")
+    arch_file = os.path.join(filepath, "小说设定.txt")
     clear_file_content(arch_file)
     save_string_to_txt(final_content, arch_file)
-    logging.info("Novel_architecture.txt has been generated successfully.")
+    logging.info("小说设定.txt has been generated successfully.")
 
-    # 修复：正确使用 os.path.join 和 os.path.exists
+    # 修复：正确使用 os.path.join 和 os.path.exists，并添加异常处理
     partial_arch_file = os.path.join(filepath, "partial_architecture.json")
     if os.path.exists(partial_arch_file):
-        os.remove(partial_arch_file)
-        logging.info("partial_architecture.json removed (all steps completed).")
+        try:
+            os.remove(partial_arch_file)
+            logging.info("partial_architecture.json removed (all steps completed).")
+        except PermissionError:
+            logging.warning("无法删除partial_architecture.json文件，因为它被另一个进程占用。请关闭所有相关应用后重试。")
+        except Exception as e:
+            logging.warning(f"删除partial_architecture.json时出错: {e}")

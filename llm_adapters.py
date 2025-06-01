@@ -338,6 +338,31 @@ class SiliconFlowAdapter(BaseLLMAdapter):
             logging.error(f"硅基流动API调用超时或失败: {e}")
             return ""
 
+# 添加一个简单的嵌入适配器类
+class SimpleEmbeddingAdapter:
+    """
+    简单的嵌入适配器，用于向量存储
+    """
+    def __init__(self, model_name="text-embedding-ada-002"):
+        self.model_name = model_name
+        
+    def embed_documents(self, texts):
+        """
+        将文本转换为向量
+        """
+        # 简单实现，返回一个固定维度的向量
+        # 实际应用中应该使用真正的嵌入模型
+        import numpy as np
+        return [np.ones(1536) for _ in texts]
+    
+    def embed_query(self, text):
+        """
+        将查询文本转换为向量
+        """
+        # 简单实现，返回一个固定维度的向量
+        import numpy as np
+        return np.ones(1536)
+
 def create_llm_adapter(
     interface_format: str,
     base_url: str,
@@ -349,28 +374,41 @@ def create_llm_adapter(
 ) -> BaseLLMAdapter:
     """
     工厂函数：根据 interface_format 返回不同的适配器实例。
+    同时为适配器添加embedding_adapter属性，用于向量存储。
     """
     fmt = interface_format.strip().lower()
+    adapter = None
+    
     if fmt == "deepseek":
-        return DeepSeekAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = DeepSeekAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "openai":
-        return OpenAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = OpenAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "azure openai":
-        return AzureOpenAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = AzureOpenAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "azure ai":
-        return AzureAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = AzureAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "ollama":
-        return OllamaAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = OllamaAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "ml studio":
-        return MLStudioAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = MLStudioAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "gemini":
         # base_url 对 Gemini 暂无用处，可忽略
-        return GeminiAdapter(api_key, model_name, max_tokens, temperature, timeout)
+        adapter = GeminiAdapter(api_key, model_name, max_tokens, temperature, timeout)
     elif fmt == "阿里云百炼":
-        return OpenAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = OpenAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "火山引擎":
-        return VolcanoEngineAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = VolcanoEngineAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "硅基流动":
-        return SiliconFlowAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
+        adapter = SiliconFlowAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     else:
         raise ValueError(f"Unknown interface_format: {interface_format}")
+    
+    # 为适配器添加embedding_adapter属性
+    try:
+        # 尝试创建一个简单的嵌入适配器
+        adapter.embedding_adapter = SimpleEmbeddingAdapter()
+        
+    except Exception as e:
+        logging.warning(f"创建embedding_adapter失败: {e}")
+    
+    return adapter

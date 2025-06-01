@@ -54,29 +54,13 @@ class RoleLibrary:
         main_frame = ctk.CTkFrame(self.window)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # 左侧面板（保持不变）
+        # 左侧面板 - 角色列表区
         left_panel = ctk.CTkFrame(main_frame, width=300)
         left_panel.pack(side="left", fill="both", padx=5, pady=5)
 
-        # 上部角色列表区（保持不变）
-        role_list_container = ctk.CTkFrame(left_panel)
-        role_list_container.pack(fill="both", expand=True, pady=(0, 5))
-
-        self.role_list_frame = ctk.CTkScrollableFrame(role_list_container)
+        # 角色列表区
+        self.role_list_frame = ctk.CTkScrollableFrame(left_panel)
         self.role_list_frame.pack(fill="both", expand=True)
-
-        # 下部内容预览区（保持不变）
-        preview_container = ctk.CTkFrame(left_panel)
-        preview_container.pack(fill="both", expand=True, pady=(5, 0))
-
-        self.preview_text = ctk.CTkTextbox(preview_container, wrap="word",
-                                            font=("Microsoft YaHei", 12))
-        scrollbar = ctk.CTkScrollbar(
-            preview_container, command=self.preview_text.yview)
-        self.preview_text.configure(yscrollcommand=scrollbar.set)
-
-        self.preview_text.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
 
         # 右侧面板（信息编辑区）
         right_panel = ctk.CTkFrame(main_frame)
@@ -143,19 +127,70 @@ class RoleLibrary:
             font=DEFAULT_FONT
         ).pack(side="left", padx=(0, 5))
 
+        # 角色权重按钮区
+        weight_frame = ctk.CTkFrame(right_panel)
+        weight_frame.pack(fill="x", padx=5, pady=5)
+        
+        # 添加六个角色权重等级按钮
+        ctk.CTkLabel(weight_frame, text="角色权重：", font=DEFAULT_FONT).pack(side="left", padx=(0, 5))
+        
+        # 背景角色按钮 (1-20)
         ctk.CTkButton(
-            name_frame,
-            text="新增",
-            width=60,
-            command=lambda: self._create_new_role("全部"),
+            weight_frame,
+            text="背景角色",
+            width=80,
+            command=lambda: self._create_new_role("背景角色", "背景角色", "1-20"),
+            font=DEFAULT_FONT
+        ).pack(side="left", padx=(0, 5))
+        
+        # 单元角色按钮 (21-40)
+        ctk.CTkButton(
+            weight_frame,
+            text="单元角色",
+            width=80,
+            command=lambda: self._create_new_role("单元角色", "单元角色", "21-40"),
+            font=DEFAULT_FONT
+        ).pack(side="left", padx=(0, 5))
+        
+        # 次要配角按钮 (41-60)
+        ctk.CTkButton(
+            weight_frame,
+            text="次要配角",
+            width=80,
+            command=lambda: self._create_new_role("次要配角", "次要配角", "41-60"),
+            font=DEFAULT_FONT
+        ).pack(side="left", padx=(0, 5))
+        
+        # 核心配角按钮 (61-80)
+        ctk.CTkButton(
+            weight_frame,
+            text="核心配角",
+            width=80,
+            command=lambda: self._create_new_role("核心配角", "核心配角", "61-80"),
+            font=DEFAULT_FONT
+        ).pack(side="left", padx=(0, 5))
+        
+        # 关键角色按钮 (81-95)
+        ctk.CTkButton(
+            weight_frame,
+            text="关键角色",
+            width=80,
+            command=lambda: self._create_new_role("关键角色", "关键角色", "81-95"),
+            font=DEFAULT_FONT
+        ).pack(side="left", padx=(0, 5))
+        
+        # 主角级按钮 (96-100)
+        ctk.CTkButton(
+            weight_frame,
+            text="主角级",
+            width=80,
+            command=lambda: self._create_new_role("主角级", "主角级", "96-100"),
             font=DEFAULT_FONT
         ).pack(side="left", padx=0)
-
-        # 属性编辑区（基础框架）
-        self.attributes_frame = ctk.CTkScrollableFrame(right_panel)
-        self.attributes_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        # 设置统一的列权重
-        self.attributes_frame.grid_columnconfigure(1, weight=1)
+        
+        # 角色内容编辑区
+        self.role_edit_text = ctk.CTkTextbox(right_panel, wrap="word", font=DEFAULT_FONT)
+        self.role_edit_text.pack(fill="both", expand=True, padx=5, pady=5)
 
         button_frame = ctk.CTkFrame(right_panel)
         button_frame.pack(fill="x", padx=5, pady=5)
@@ -326,10 +361,10 @@ class RoleLibrary:
             font=DEFAULT_FONT
         ).pack(side="left", padx=10)
 
-        # 加载character_state.txt按钮
+        # 加载角色状态.txt按钮
         ctk.CTkButton(
             btn_frame,
-            text="加载character_state.txt",
+            text="加载角色状态.txt",
             width=160,
             command=lambda: self.load_default_character_state(right_panel),
             font=DEFAULT_FONT
@@ -348,7 +383,7 @@ class RoleLibrary:
         content_frame.grid_rowconfigure(0, weight=1)
 
     def analyze_character_state(self, right_panel, left_panel):
-        """分析角色状态文件，使用LLM提取角色信息并保存到临时角色库"""
+        """分析角色状态文件，使用LLM提取角色信息"""
         content = ""
         for widget in right_panel.winfo_children():
             if isinstance(widget, ctk.CTkTextbox):
@@ -360,18 +395,12 @@ class RoleLibrary:
             return
 
         try:
-            # 创建临时角色库目录
-            target_dir = os.path.join(self.save_path, "临时角色库")
-            # 清空现有临时角色库
-            if os.path.exists(target_dir):
-                for filename in os.listdir(target_dir):
-                    file_path = os.path.join(target_dir, filename)
-                    try:
-                        if os.path.isfile(file_path):
-                            os.unlink(file_path)
-                    except Exception as e:
-                        print(f"删除文件{file_path}时出错: {e}")
-            os.makedirs(target_dir, exist_ok=True)
+            # 显示处理中提示
+            for widget in left_panel.winfo_children():
+                widget.destroy()
+            processing_label = ctk.CTkLabel(left_panel, text="正在分析角色信息，请稍候...", font=("Microsoft YaHei", 14))
+            processing_label.pack(pady=20)
+            left_panel.update()
 
             # 调用LLM进行分析
             prompt = f"{Character_Import_Prompt}\n<<待分析小说文本开始>>\n{content}\n<<待分析小说文本结束>>"
@@ -384,11 +413,12 @@ class RoleLibrary:
             roles = self._parse_llm_response(response)
             
             if not roles:
-                messagebox.showwarning("警告", "未解析到有效角色信息", parent=self.window)
+                messagebox.showwarning("警告", "未解析到有效角色信息，请检查文本内容或修改提示词。\n\n可能的原因：\n1. 文本中没有明确的角色信息\n2. LLM返回的格式不符合解析要求\n3. 角色名称格式不正确\n4. 角色名后面的冒号格式不正确", parent=self.window)
                 return
 
-            # 直接显示分析结果而不保存到文件
+            # 显示分析结果
             self._display_analyzed_roles(left_panel, roles)
+            messagebox.showinfo("分析成功", f"成功解析出{len(roles)}个角色信息，请选择需要导入的角色。", parent=self.window)
 
         except Exception as e:
             messagebox.showerror("分析失败", f"LLM分析出错：{str(e)}", parent=self.window)
@@ -447,85 +477,70 @@ class RoleLibrary:
         ctk.CTkButton(btn_frame, text="取消选择", 
                      command=lambda: self._toggle_all(False), font=DEFAULT_FONT).pack(side="left")
 
-    def _parse_temp_role_file(self, file_path):
-        """解析临时角色文件"""
-        attributes = {}
-        current_attr = None
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    # 统一解析├──和└──两种前缀
-                    if any(prefix in line for prefix in ['├──', '└──']) and '：' in line:
-                        prefix = '├──' if '├──' in line else '└──'
-                        current_attr = line.split(prefix)[1].split('：')[0].strip()
-                        attributes[current_attr] = []
-                    elif any(prefix in line for prefix in ['│  ├──', '│  └──']):
-                        prefix = '│  ├──' if '│  ├──' in line else '│  └──'
-                        if current_attr:
-                            item = line.split(prefix)[1].strip()
-                            attributes[current_attr].append(item)
-        except Exception as e:
-            messagebox.showerror("解析错误", f"解析临时文件失败：{str(e)}", parent=self.window)
-        return attributes
-
     def _parse_llm_response(self, response):
         """解析LLM返回的角色数据"""
         roles = []
         current_role = None
         current_attr = None
-        current_subattr = None
         
-        attribute_pattern = re.compile(r'^([├└]──)([\w\u4e00-\u9fa5]+)\s*[:：]')
-        item_pattern = re.compile(r'^│\s+([├└]──)\s*(.*)')
+        # 角色名模式（例如：周雍：）- 修改为更准确匹配中文字符
+        role_name_pattern = re.compile(r'^([\u4e00-\u9fff\w]+)[:：]\s*$')
+        # 基础属性模式（例如：- 称谓：xxx）
+        basic_attr_pattern = re.compile(r'^-\s+([^:：]+)[:：]\s*(.*)')
+        # 主要属性模式（例如：基础信息：、势力特征：等）
+        main_attr_pattern = re.compile(r'^([^-:：]+)[:：]\s*$')
         
-        for line in response.split('\n'):
-            line = line.rstrip()
+        # 定义属性标题列表，这些不应该被识别为角色名
+        attribute_titles = ["基础信息", "势力特征", "生命状态", "基本简介"]
+        
+        # 记录解析过程，用于调试
+        debug_info = []
+        
+        lines = response.split('\n')
+        i = 0
+        while i < len(lines):
+            line = lines[i].rstrip()
             
-            # 检测角色名称行（兼容中英文冒号和前后空格）
-            role_match = re.match(r'^\s*([\u4e00-\u9fa5a-zA-Z0-9]+)\s*[:：]\s*$', line)
-            if role_match:
+            # 检测角色名称行（格式为：角色名：）
+            role_match = role_name_pattern.match(line)
+            
+            # 如果找到角色名，且不是属性标题
+            if role_match and role_match.group(1).strip() not in attribute_titles:
                 current_role = role_match.group(1).strip()
+                debug_info.append(f"找到角色: {current_role}")
                 roles.append({'name': current_role, 'attributes': {}})
-                continue
-                
-            if not current_role:
-                continue
-                
-            # 解析属性（支持子属性）
-            attr_match = attribute_pattern.match(line)
-            if attr_match:
-                prefix, attr_name = attr_match.groups()
-                current_attr = attr_name.strip()
-                roles[-1]['attributes'][current_attr] = []
-                current_subattr = None
-                continue
-                
-            # 解析属性条目（支持多级结构）
-            item_match = item_pattern.match(line)
-            if item_match and current_attr:
-                prefix, content = item_match.groups()
-                content = content.strip()
-                
-                # 解析子属性（例如"身体状态: xxx"）
-                if ':' in content or '：' in content:
-                    subattr_match = re.split(r'[:：]', content, 1)
-                    if len(subattr_match) > 1:
-                        current_subattr = subattr_match[0].strip()
-                        value = subattr_match[1].strip()
-                        if value:  # 值不为空时才添加
-                            roles[-1]['attributes'][current_attr].append(
-                                f"{current_subattr}: {value}"
-                            )
-                        continue
-                
-                # 普通条目处理
-                if content:
-                    if current_subattr:
-                        # 子属性的延续条目
-                        roles[-1]['attributes'][current_attr][-1] += f"，{content}"
-                    else:
-                        roles[-1]['attributes'][current_attr].append(content)
+                current_attr = None
+            # 如果已有角色，处理属性
+            elif current_role is not None:
+                # 检查是否是主要属性（如基础信息：、势力特征：等）
+                main_attr_match = main_attr_pattern.match(line)
+                if main_attr_match:
+                    current_attr = main_attr_match.group(1).strip()
+                    if current_attr not in roles[-1]['attributes']:
+                        roles[-1]['attributes'][current_attr] = []
+                        debug_info.append(f"  添加主要属性: {current_attr}")
+                # 检查是否是基础属性（如其他称谓、角色权重等）
+                elif current_attr and line.startswith('-'):
+                    basic_attr_match = basic_attr_pattern.match(line)
+                    if basic_attr_match:
+                        attr_name = basic_attr_match.group(1).strip()
+                        attr_value = basic_attr_match.group(2).strip()
+                        roles[-1]['attributes'][current_attr].append(f"{attr_name}：{attr_value}")
+                        debug_info.append(f"    添加基础属性: {attr_name}：{attr_value}")
+                # 如果是属性下的内容行
+                elif current_attr and line.strip() and not line.startswith('#'):
+                    # 如果不是以-开头但属于某个属性，作为该属性的内容
+                    roles[-1]['attributes'][current_attr].append(line.strip())
+                    debug_info.append(f"    添加内容: {line.strip()}")
+            
+            i += 1
+        
+        # 过滤掉没有属性的角色
+        roles = [role for role in roles if role['attributes']]
+        
+        # 过滤掉没有属性的角色
+        roles = [role for role in roles if role['attributes']]
+        
         return roles
 
     def _display_analyzed_roles(self, parent, roles):
@@ -583,6 +598,91 @@ class RoleLibrary:
                 role['var'].set(select)
             else:
                 role['var'].set(not current_state)
+            
+    def _parse_temp_role_file(self, file_path):
+        """解析临时角色文件的属性
+        根据新的角色状态格式解析临时角色文件，提取角色属性
+        """
+        attributes = {}
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 使用与_parse_llm_response相同的解析逻辑
+            current_attr = None
+            
+            # 角色名模式（例如：周雍：）
+            role_name_pattern = re.compile(r'^([\u4e00-\u9fff\w]+)[:：]\s*$')
+            # 基础属性模式（例如：- 称谓：xxx）
+            basic_attr_pattern = re.compile(r'^-\s+([^:：]+)[:：]\s*(.*)')
+            # 主要属性模式（例如：基础信息：、势力特征：等）
+            main_attr_pattern = re.compile(r'^([^-:：]+)[:：]\s*$')
+            
+            lines = content.split('\n')
+            for line in lines:
+                line = line.rstrip()
+                
+                # 检查是否是主要属性（如基础信息：、势力特征：等）
+                main_attr_match = main_attr_pattern.match(line)
+                if main_attr_match and not role_name_pattern.match(line):  # 排除角色名行
+                    current_attr = main_attr_match.group(1).strip()
+                    if current_attr not in attributes:
+                        attributes[current_attr] = []
+                # 检查是否是基础属性或内容行
+                elif current_attr and line.strip() and not line.startswith('#'):
+                    attributes.setdefault(current_attr, []).append(line.strip())
+            
+        except Exception as e:
+            print(f"解析临时角色文件出错: {str(e)}")
+        
+        return attributes
+
+    def confirm_import(self, import_window):
+        """确认导入选中的角色到临时角色库
+        将用户勾选的角色保存到临时角色库目录
+        """
+        # 获取临时角色库路径 - 修改为角色库文件夹下
+        temp_dir = os.path.join(self.save_path, "临时角色库")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # 获取选中的角色
+        selected_roles = []
+        for role_name, role_data in self.character_checkboxes.items():
+            if role_data['var'].get():
+                selected_roles.append(role_data['data'])
+        
+        if not selected_roles:
+            messagebox.showwarning("警告", "未选择任何角色", parent=self.window)
+            return
+        
+        # 保存选中的角色到临时角色库
+        for role in selected_roles:
+            role_name = role['name']
+            file_path = os.path.join(temp_dir, f"{role_name}.txt")
+            
+            # 构建角色内容
+            content = f"{role_name}：\n"
+            
+            # 添加属性内容
+            for attr_name, attr_values in role['attributes'].items():
+                content += f"{attr_name}：\n"
+                for value in attr_values:
+                    content += f"{value}\n"
+            
+            # 保存到文件
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            except Exception as e:
+                messagebox.showerror("错误", f"保存角色 {role_name} 失败: {str(e)}", parent=self.window)
+        
+        messagebox.showinfo("成功", f"已成功导入 {len(selected_roles)} 个角色到临时角色库", parent=self.window)
+        
+        # 刷新角色库页面的类型栏，确保临时角色库类型显示出来
+        self.load_categories()
+        
+        # 关闭导入窗口
+        import_window.destroy()
 
 
     def import_from_file(self, right_panel):
@@ -625,10 +725,10 @@ class RoleLibrary:
             messagebox.showerror("导入失败", f"无法读取文件：{str(e)}", parent=self.window)
 
     def load_default_character_state(self, right_panel):
-        """加载character_state.txt文件到右侧窗口"""
+        """加载角色状态.txt文件到右侧窗口"""
         # 获取保存路径
         save_path = os.path.dirname(self.save_path)
-        file_path = os.path.join(save_path, "character_state.txt")
+        file_path = os.path.join(save_path, "角色状态.txt")
 
         if not os.path.exists(file_path):
             messagebox.showwarning("警告", f"未找到文件: {file_path}", parent=self.window)
@@ -664,64 +764,6 @@ class RoleLibrary:
         except Exception as e:
             messagebox.showerror("错误", f"加载文件失败: {str(e)}", parent=self.window)
 
-    def confirm_import(self, import_window):
-        """从临时角色库导入选中的角色"""
-        # 创建必要的目录
-        target_dir = os.path.join(self.save_path, "临时角色库")
-        os.makedirs(target_dir, exist_ok=True)
-        
-        try:
-            # 获取选中的角色
-            selected_roles = [role_data['data'] for role_data in self.character_checkboxes.values() 
-                            if role_data['var'].get()]
-            
-            if not selected_roles:
-                # 创建错误提示窗口
-                error_window = ctk.CTkToplevel(import_window)
-                error_window.title("错误")
-                error_window.transient(import_window)
-                error_window.grab_set()
-                
-                # 窗口内容
-                ctk.CTkLabel(error_window, text="请至少选择一个角色", font=DEFAULT_FONT).pack(padx=20, pady=10)
-                ctk.CTkButton(error_window, text="确定", command=error_window.destroy, font=DEFAULT_FONT).pack(pady=10)
-                
-                # 窗口居中
-                error_window.update_idletasks()
-                e_width = error_window.winfo_width()
-                e_height = error_window.winfo_height()
-                x = import_window.winfo_x() + (import_window.winfo_width() - e_width) // 2
-                y = import_window.winfo_y() + (import_window.winfo_height() - e_height) // 2
-                error_window.geometry(f"+{x}+{y}")
-                error_window.attributes('-topmost', 1)
-                return
-
-            # 从内存数据直接保存角色
-            for role in selected_roles:
-                dest_path = os.path.join(target_dir, f"{role['name']}.txt")
-                
-                # 构建角色内容
-                content_lines = [f"{role['name']}："]
-                for attr, items in role['attributes'].items():
-                    content_lines.append(f"├──{attr}：")
-                    for i, item in enumerate(items):
-                        prefix = "├──" if i < len(items)-1 else "└──"
-                        content_lines.append(f"│  {prefix}{item}")
-                
-                # 直接写入文件，覆盖已存在的文件
-                with open(dest_path, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(content_lines))
-
-            # 刷新分类显示
-            self.load_categories()
-            import_window.destroy()
-            
-        except Exception as e:
-            # 静默处理错误
-            import_window.destroy()
-
-
-
     def delete_current_role(self):
         """删除当前角色"""
         if not hasattr(self, 'current_role') or not self.current_role:
@@ -742,7 +784,7 @@ class RoleLibrary:
             if os.path.exists(all_path):
                 os.remove(all_path)
             self.show_category(self.selected_category)
-            self.preview_text.delete("1.0", "end")
+            self.role_edit_text.delete("1.0", "end")
             msg = messagebox.showinfo("成功", "角色已删除", parent=self.window)
             self.window.attributes('-topmost', 1)
             msg.attributes('-topmost', 1)
@@ -752,32 +794,6 @@ class RoleLibrary:
             self.window.attributes('-topmost', 1)
             msg.attributes('-topmost', 1)
             self.window.after(200, lambda: [self.window.attributes('-topmost', 0), msg.attributes('-topmost', 0)])
-
-    def _build_role_content(self):
-        """构建角色文件内容"""
-        content = [f"{self.role_name_var.get()}："]
-        attributes_order = ["物品", "能力", "状态", "主要角色间关系网", "触发或加深的事件"]
-
-        for attr_name in attributes_order:
-            content.append(f"├──{attr_name}：")
-            # 找到对应的 attribute_block
-            for block in self.attributes_frame.winfo_children():
-                if isinstance(block, ctk.CTkFrame) and block.attribute_name == attr_name:
-                    # 遍历该 block 中的所有 CTkEntry
-                    for child in block.winfo_children():
-                        if isinstance(child, ctk.CTkFrame):  # 条目行
-                            for item in child.winfo_children():
-                                if isinstance(item, ctk.CTkEntry):
-                                    entry_text = item.get().strip()
-                                    if entry_text:  # 只添加非空条目
-                                        content.append(f"│  ├──{entry_text}")
-                    break  # 找到对应属性后跳出循环
-        return content
-
-    def _save_role_file(self, content, save_path):
-        """保存角色文件"""
-        with open(save_path, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(content))
 
     def _check_role_name_conflict(self, new_name):
         """检查角色名是否重复，遍历整个角色文件夹"""
@@ -825,17 +841,39 @@ class RoleLibrary:
                                     "\n请使用不同的角色名称", parent=self.window)
                 return
 
-        content = self._build_role_content()
+        # 获取编辑框中的内容
+        content = self.role_edit_text.get("1.0", "end-1c")
+        
+        # 检查第一行是否包含角色名称
+        lines = content.split('\n')
+        if lines and (':' in lines[0] or '：' in lines[0]):
+            # 如果角色名称已更改，更新第一行
+            first_line = lines[0]
+            old_name = first_line.split(':')[0].split('：')[0].strip()
+            if old_name != new_name:
+                if ':' in first_line:
+                    lines[0] = f"{new_name}:{first_line.split(':', 1)[1]}"
+                else:
+                    lines[0] = f"{new_name}：{first_line.split('：', 1)[1]}"
+                content = '\n'.join(lines)
+        else:
+            # 如果没有合适的第一行，添加角色名称
+            content = f"{new_name}：\n{content}"
+        
         save_path = os.path.join(self.save_path, self.selected_category,
                                  f"{new_name}.txt")
 
         try:
-            self._save_role_file(content, save_path)
-            # 如果修改了角色名，更新文件名
+            # 直接保存文本内容
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+                
+            # 如果修改了角色名，删除旧文件
             if new_name != self.current_role:
                 old_path = os.path.join(self.save_path, self.selected_category,
                                         f"{self.current_role}.txt")
-                os.rename(old_path, save_path)
+                if os.path.exists(old_path):
+                    os.remove(old_path)
 
             # 更新显示
             self.current_role = new_name
@@ -963,38 +1001,108 @@ class RoleLibrary:
             msg.attributes('-topmost', 1)
             self.window.after(200, lambda: [self.window.attributes('-topmost', 0), msg.attributes('-topmost', 0)])
 
-    def _create_new_role(self, category):
-        """在指定分类创建新角色"""
+    def _create_new_role(self, category, weight_name="背景角色", weight_range="1-20"):
+        """在指定分类创建新角色
+        
+        Args:
+            category: 角色分类
+            weight_name: 权重名称
+            weight_range: 权重范围
+        """
+        # 确保分类目录存在
         role_dir = os.path.join(self.save_path, category)
-        base_name = "未命名"
+        os.makedirs(role_dir, exist_ok=True)
+        
+        base_name_template = "未命名"
+        base_name = base_name_template
         counter = 1
 
-        # 生成唯一文件名
-        while os.path.exists(os.path.join(role_dir, f"{base_name}.txt")):
-            base_name = f"未命名{counter}"
+        # 生成唯一文件名，确保在整个角色库中唯一
+        while self._check_role_name_conflict(base_name):
+            base_name = f"{base_name_template}{counter}"
             counter += 1
 
-        # 创建基础文件结构（包含初始条目）
-        content = f"{base_name}：\n" + "\n".join([
-            "├──物品：",
-            "│  └──待补充",
-            "├──能力：",
-            "│  └──待补充",
-            "├──状态：",
-            "│  └──待补充",
-            "├──主要角色间关系网：",
-            "│  └──待补充",
-            "├──触发或加深的事件：",
-            "│  └──待补充"
-        ])
+        # 根据权重等级生成对应的角色状态字段
+        content = f"{base_name}：\n"
+        
+        # 基础信息（所有权重等级都有）
+        content += f"- 称谓：{base_name}（正式名）\n"
+        content += f"- 角色权重：{weight_range}（定位：{weight_name}）\n"
+        
+        # 关键事件记录（所有权重等级都有）
+        content += "关键事件记录：\n"
+        content += "- 第1章：[事件类型] 简要说明（如初次登场、展示技能、埋下伏笔）\n"
+        
+        # 单元角色及以上权重等级（21-100）
+        if weight_name != "背景角色":
+            content += "势力特征：\n"
+            content += "- 所属组织/势力：\n"
+            content += "- 身份：\n"
+            content += "- 外貌特征：\n"
+            content += "- 性格：\n"
+            content += "生命状态：\n"
+            content += "- 身体状态：\n"
+            content += "- 心理状态：\n"
+            content += "- 长期影响：\n"
+        
+        # 次要配角及以上权重等级（41-100）
+        if weight_name in ["次要配角", "核心配角", "关键角色", "主角级"]:
+            content += "持有物品：\n"
+            content += "- 物品名称：（功能简述）\n"
+            content += "技术能力：\n"
+            content += "- 技能名称：（功能描述）\n"
+        
+        # 核心配角及以上权重等级（61-100）
+        if weight_name in ["核心配角", "关键角色", "主角级"]:
+            content += "位置轨迹：\n"
+            content += "- 场景名称（时间线：第1章）（事件：简要说明）（同行人物：角色A、角色B）（目的：XXX）\n"
+            content += "关系网：\n"
+            content += "- 角色名: 关系类型, 关系强度[低/中/高], 互动频率[稀少/普通/频繁]\n"
+        
+        # 关键角色及以上权重等级（81-100）
+        if weight_name in ["关键角色", "主角级"]:
+            content += "行为模式 / 决策偏好：\n"
+            content += "- 行为模式：\n"
+            content += "- 决策偏好：\n"
+            content += "语言风格 / 对话关键词：\n"
+            content += "- 语言风格：\n"
+            content += "- 关键词：\n"
+            content += "情感线状态：\n"
+            content += "- 情感线状态：起点阶段描述（如初识、敌对、无感、暗恋萌芽）\n"
+            content += "- 感情进展标记：【好感度：XX%】【羁绊等级：C/B】\n"
 
         with open(os.path.join(role_dir, f"{base_name}.txt"), "w", encoding="utf-8") as f:
             f.write(content)
 
+        # 刷新分类列表
+        categories = self._get_all_categories()
+        self.category_combobox.configure(values=categories)
+        
+        # 刷新分类按钮区域
+        for widget in self.scroll_frame.winfo_children():
+            widget.destroy()
+            
+        # 添加分类按钮
+        for cat in categories:
+            if cat != "全部":  # 全部按钮已经固定在左侧
+                btn = ctk.CTkButton(
+                    self.scroll_frame,
+                    text=cat,
+                    width=80,
+                    font=("Microsoft YaHei", 12),
+                    command=lambda c=cat: self.show_category(c)
+                )
+                btn.pack(side="left", padx=2)
+                # 添加右键菜单
+                btn.bind("<Button-3>", lambda event, c=cat: self._show_category_menu(event, c))
+        
         # 刷新显示
         self.show_category(category)
         self.role_name_var.set(base_name)
         self.current_role = base_name
+        
+        # 显示角色内容
+        self.show_role(base_name)
 
     def create_category_bar(self):
         """创建分类按钮区"""
@@ -1226,10 +1334,8 @@ class RoleLibrary:
     def show_role(self, role_name):
         """显示角色详细信息（支持UTF-8/ANSI编码）"""
         try:
-            # 清空现有属性控件
-            self.preview_text.delete('1.0', tk.END)
-            for widget in self.attributes_frame.winfo_children():
-                widget.destroy()
+            # 清空编辑区
+            self.role_edit_text.delete('1.0', tk.END)
 
             # 更新角色名称显示
             self.current_role = role_name.split(":")[0].split("：")[0]
@@ -1267,51 +1373,23 @@ class RoleLibrary:
                 file_path = os.path.join(
                     self.save_path, self.selected_category, f"{role_name}.txt")
 
-            content, _ = self._read_file_with_fallback_encoding(file_path)
-
-            # 解析属性结构
-            attributes = {
-                "物品": [],
-                "能力": [],
-                "状态": [],
-                "主要角色间关系网": [],
-                "触发或加深的事件": []
-            }
-            current_attribute = None
-            for line in content[1:]:
-                # 改进属性名称识别
-                if line.startswith(("├──", "├──")):
-                    # 提取属性名称（兼容冒号和空格）
-                    attr_part = line.split("──")[1].strip()
-                    attr_name = re.split(r'[:：]', attr_part, 1)[0].strip()
-
-                    # 匹配预设属性
-                    for preset_attr in attributes:
-                        if attr_name == preset_attr:
-                            current_attribute = preset_attr
-                            indent_level = line.find(
-                                "├") if "├" in line else line.find("├")
-                            break
-                    else:
-                        current_attribute = None
-
-                # 改进条目内容提取
-                elif current_attribute and line.startswith(("│  ", "   ")):
-                    # 提取整个条目内容
-                    item_content = line.strip()
-                    # 去掉前面的符号和空格
-                    item_content = re.sub(r'^[│├└─\s]*', '', item_content)
-                    attributes[current_attribute].append(item_content)
-
-            # 显示原始文件内容
-            self.preview_text.insert(tk.END, '\n'.join(content))
-
-            # 重构属性编辑区
-            for attr_name, items in attributes.items():
-                self._create_attribute_section(attr_name, items)
+            # 读取文件内容
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 显示原始文件内容到编辑框
+            self.role_edit_text.insert(tk.END, content)
 
         except FileNotFoundError as e:
             messagebox.showerror("错误", f"文件不存在：{e}", parent=self.window)
+        except UnicodeDecodeError:
+            # 尝试使用ANSI编码读取
+            try:
+                with open(file_path, 'r', encoding='gbk') as f:
+                    content = f.read()
+                self.role_edit_text.insert(tk.END, content)
+            except Exception as e:
+                messagebox.showerror("错误", f"读取文件失败：{e}", parent=self.window)
         except Exception as e:
             messagebox.showerror("错误", f"读取文件失败：{e}", parent=self.window)
 

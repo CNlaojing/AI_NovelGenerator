@@ -3,16 +3,12 @@
 import os
 import json
 
-def read_file(filename: str) -> str:
-    """读取文件的全部内容，若文件不存在或异常则返回空字符串。"""
+def read_file(filepath: str) -> str:
+    """读取文件内容"""
     try:
-        with open(filename, 'r', encoding='utf-8') as file:
-            content = file.read()
-        return content
-    except FileNotFoundError:
-        return ""
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return f.read()
     except Exception as e:
-        print(f"[read_file] 读取文件时发生错误: {e}")
         return ""
 
 def append_text_to_file(text_to_append: str, file_path: str):
@@ -26,21 +22,21 @@ def append_text_to_file(text_to_append: str, file_path: str):
     except IOError as e:
         print(f"[append_text_to_file] 发生错误：{e}")
 
-def clear_file_content(filename: str):
-    """清空指定文件内容。"""
+def clear_file_content(filepath: str) -> None:
+    """清空文件内容"""
     try:
-        with open(filename, 'w', encoding='utf-8') as file:
-            pass
-    except IOError as e:
-        print(f"[clear_file_content] 无法清空文件 '{filename}' 的内容：{e}")
-
-def save_string_to_txt(content: str, filename: str):
-    """将字符串保存为 txt 文件（覆盖写）。"""
-    try:
-        with open(filename, 'w', encoding='utf-8') as file:
-            file.write(content)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("")
     except Exception as e:
-        print(f"[save_string_to_txt] 保存文件时发生错误: {e}")
+        raise Exception(f"清空文件失败: {str(e)}")
+
+def save_string_to_txt(content: str, filepath: str) -> None:
+    """保存字符串到文件"""
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+    except Exception as e:
+        raise Exception(f"保存文件失败: {str(e)}")
 
 def save_data_to_json(data: dict, file_path: str) -> bool:
     """将数据保存到 JSON 文件。"""
@@ -51,3 +47,7 @@ def save_data_to_json(data: dict, file_path: str) -> bool:
     except Exception as e:
         print(f"[save_data_to_json] 保存数据到JSON文件时出错: {e}")
         return False
+
+def ensure_unix_lf(text: str) -> str:
+    """确保文本使用Unix风格的换行符"""
+    return text.replace('\r\n', '\n').replace('\r', '\n')

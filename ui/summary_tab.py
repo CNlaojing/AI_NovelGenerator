@@ -7,14 +7,14 @@ from utils import read_file, save_string_to_txt, clear_file_content
 from ui.context_menu import TextWidgetContextMenu
 
 def build_summary_tab(self):
-    self.summary_tab = self.tabview.add("前文摘要")
+    self.summary_tab = self.tabview.add("前情摘要")
     self.summary_tab.rowconfigure(0, weight=0)
     self.summary_tab.rowconfigure(1, weight=1)
     self.summary_tab.columnconfigure(0, weight=1)
     self.summary_tab.columnconfigure(1, weight=0)
     self.summary_tab.columnconfigure(2, weight=0)
 
-    load_btn = ctk.CTkButton(self.summary_tab, text="加载 global_summary.txt", command=self.load_global_summary, font=("Microsoft YaHei", 12))
+    load_btn = ctk.CTkButton(self.summary_tab, text="加载 前情摘要.txt", command=self.load_global_summary, font=("Microsoft YaHei", 12))
     load_btn.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
     self.word_count_label = ctk.CTkLabel(self.summary_tab, text="字数：0", font=("Microsoft YaHei", 12))
@@ -39,11 +39,11 @@ def load_global_summary(self):
     if not filepath:
         messagebox.showwarning("警告", "请先设置保存文件路径")
         return
-    filename = os.path.join(filepath, "global_summary.txt")
+    filename = os.path.join(filepath, "前情摘要.txt")
     content = read_file(filename)
     self.summary_text.delete("0.0", "end")
     self.summary_text.insert("0.0", content)
-    self.log("已加载 global_summary.txt 到编辑区。")
+    self.log("已加载 前情摘要.txt 到编辑区。")
 
 def save_global_summary(self):
     filepath = self.filepath_var.get().strip()
@@ -51,7 +51,7 @@ def save_global_summary(self):
         messagebox.showwarning("警告", "请先设置保存文件路径")
         return
     content = self.summary_text.get("0.0", "end").strip()
-    filename = os.path.join(filepath, "global_summary.txt")
+    filename = os.path.join(filepath, "前情摘要.txt")
     clear_file_content(filename)
     save_string_to_txt(content, filename)
-    self.log("已保存对 global_summary.txt 的修改。")
+    self.log("已保存对 前情摘要.txt 的修改。")

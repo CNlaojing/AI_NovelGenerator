@@ -12,7 +12,7 @@ def build_setting_tab(self):
     self.setting_tab.rowconfigure(1, weight=1)
     self.setting_tab.columnconfigure(0, weight=1)
 
-    load_btn = ctk.CTkButton(self.setting_tab, text="加载 Novel_architecture.txt", command=self.load_novel_architecture, font=("Microsoft YaHei", 12))
+    load_btn = ctk.CTkButton(self.setting_tab, text="加载 小说设定.txt", command=self.load_novel_architecture, font=("Microsoft YaHei", 12))
     load_btn.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
     self.setting_word_count_label = ctk.CTkLabel(self.setting_tab, text="字数：0", font=("Microsoft YaHei", 12))
@@ -38,11 +38,11 @@ def load_novel_architecture(self):
     if not filepath:
         messagebox.showwarning("警告", "请先设置保存文件路径")
         return
-    filename = os.path.join(filepath, "Novel_architecture.txt")
+    filename = os.path.join(filepath, "小说设定.txt")
     content = read_file(filename)
     self.setting_text.delete("0.0", "end")
     self.setting_text.insert("0.0", content)
-    self.log("已加载 Novel_architecture.txt 内容到编辑区。")
+    self.log("已加载 小说设定.txt 内容到编辑区。")
 
 def save_novel_architecture(self):
     filepath = self.filepath_var.get().strip()
@@ -50,7 +50,7 @@ def save_novel_architecture(self):
         messagebox.showwarning("警告", "请先设置保存文件路径。")
         return
     content = self.setting_text.get("0.0", "end").strip()
-    filename = os.path.join(filepath, "Novel_architecture.txt")
+    filename = os.path.join(filepath, "小说设定.txt")
     clear_file_content(filename)
     save_string_to_txt(content, filename)
-    self.log("已保存对 Novel_architecture.txt 的修改。")
+    self.log("已保存对 小说设定.txt 的修改。")
