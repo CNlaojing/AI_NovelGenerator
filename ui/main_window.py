@@ -417,6 +417,57 @@ class NovelGeneratorGUI:
     # 删除重复的show_plot_arcs_ui函数实现,只保留函数引用
     show_plot_arcs_ui = show_plot_arcs_ui
 
+    def show_donate_window(self):
+        """显示捐赠窗口"""
+        donate_window = ctk.CTkToplevel(self.master)
+        donate_window.title("感谢支持")
+        donate_window.geometry("800x900")
+        donate_window.resizable(False, False)
+        
+        # 标题文本
+        title_text = (
+            "AI_NovelGenerator (CNlaojing Fork)\n"
+            "基于 YILING0013/AI_NovelGenerator 的自动小说生成工具增强版本\n"
+            "本项目是Fork分支，由 CNlaojing 维护。"
+        )
+        title_label = ctk.CTkLabel(
+            donate_window, 
+            text=title_text,
+            wraplength=380,
+            justify="left",
+            font=("Microsoft YaHei", 12)
+        )
+        title_label.pack(pady=(20, 10), padx=10)
+        
+        # 创建图片框架
+        image_frame = ctk.CTkFrame(donate_window)
+        image_frame.pack(pady=10, padx=10)
+        
+        try:
+            # 修改图片路径，使用os.path.join来构建正确的路径
+            img_path = os.path.join(os.path.dirname(__file__), "ds.dat")
+            img = tk.PhotoImage(file=img_path)
+            img_label = tk.Label(image_frame, image=img)
+            img_label.image = img  # 保持引用防止垃圾回收
+            img_label.pack()
+        except Exception as e:
+            error_label = ctk.CTkLabel(
+                image_frame,
+                text="无法加载二维码图片",
+                font=("Microsoft YaHei", 12)
+            )
+            error_label.pack(pady=20)
+            print(f"Error loading image: {e}")
+        
+        # 底部文本
+        bottom_text = "如非正常渠道获取本软件，请勿扫码捐赠，感谢对本软件的支持"
+        bottom_label = ctk.CTkLabel(
+            donate_window,
+            text=bottom_text,
+            font=("Microsoft YaHei", 12)
+        )
+        bottom_label.pack(pady=(10, 20))
+
     # ----------------- 将导入的各模块函数直接赋给类方法 -----------------
     generate_novel_architecture_ui = generate_novel_architecture_ui
     generate_volume_ui = generate_volume_ui  # 添加到类方法列表

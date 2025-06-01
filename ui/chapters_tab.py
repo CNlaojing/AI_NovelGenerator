@@ -36,6 +36,20 @@ def build_chapters_tab(self):
     refresh_btn = ctk.CTkButton(top_frame, text="刷新章节列表", command=self.refresh_chapters_list, font=("Microsoft YaHei", 12))
     refresh_btn.grid(row=0, column=5, padx=5, pady=5, sticky="e")
 
+    # 添加捐赠按钮
+    donate_btn = ctk.CTkButton(
+        top_frame,
+        text="捐赠",
+        width=40,
+        height=25,
+        fg_color="transparent",
+        border_width=0,
+        text_color=("gray60", "gray30"),
+        command=self.show_donate_window,
+        font=("Microsoft YaHei", 12)
+    )
+    donate_btn.grid(row=0, column=6, padx=5, pady=5, sticky="e")
+
     self.chapters_word_count_label = ctk.CTkLabel(top_frame, text="字数：0", font=("Microsoft YaHei", 12))
     self.chapters_word_count_label.grid(row=0, column=4, padx=(0,10), sticky="e")
 
