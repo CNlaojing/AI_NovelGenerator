@@ -15,7 +15,7 @@ def build_main_tab(self):
     self.main_tab = self.tabview.add("主界面")
     self.main_tab.rowconfigure(0, weight=1)
     self.main_tab.columnconfigure(0, weight=1)
-    self.main_tab.columnconfigure(1, weight=1)
+    self.main_tab.columnconfigure(1, weight=0)
 
     self.left_frame = ctk.CTkFrame(self.main_tab)
     self.left_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)

@@ -125,20 +125,20 @@ def build_optional_buttons_area(self, start_row=2):
 
     self.btn_check_consistency = ctk.CTkButton(
         self.optional_btn_frame, text="一致性审校", command=self.do_consistency_check, 
-        font=("Microsoft YaHei", 12), width=150  # 固定宽度
+        font=("Microsoft YaHei", 12), width=160  # 固定宽度
     )
     self.btn_check_consistency.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
     self.plot_arcs_btn = ctk.CTkButton(
         self.optional_btn_frame, text="查看剧情要点", command=self.show_plot_arcs_ui,
-        font=("Microsoft YaHei", 12), width=150
+        font=("Microsoft YaHei", 12), width=160
     )
     self.plot_arcs_btn.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
     # 新增角色库按钮
     self.role_library_btn = ctk.CTkButton(
         self.optional_btn_frame, text="角色库", command=self.show_role_library,
-        font=("Microsoft YaHei", 12), width=150
+        font=("Microsoft YaHei", 12), width=160
     )
     self.role_library_btn.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
 
