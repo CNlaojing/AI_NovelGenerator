@@ -247,6 +247,10 @@ def do_consistency_check(self, *args, **kwargs):
     prompt_dialog.geometry("900x700")
     prompt_dialog.transient(self.master)
     prompt_dialog.grab_set()
+    prompt_dialog.attributes('-topmost', True)  # 设置为置顶窗口
+    
+    # 禁止最小化窗口
+    prompt_dialog.protocol("WM_ICONIFY_WINDOW", lambda: prompt_dialog.deiconify())
     # 初始化用户确认标志
     prompt_dialog.user_confirmed = False
     

@@ -65,8 +65,7 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
 
 ## 角色索引表（唯一标识区）
 
-| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 权重等级 |
-|--------|----------|----------|----------|----------|------------|----------|
+
 """
             save_string_to_txt(character_db_content, all_character_file)
             logging.info("已创建角色数据库.txt基本结构")
@@ -410,6 +409,7 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                 status = "活跃"
                 last_chapter = f"第{chap_num}章"
                 weight = "50"
+                last_location = "未知"
                 
                 # 提取称谓
                 other_names_match = re.search(r'称谓：([^\n]+)', block)
@@ -435,6 +435,15 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                 if weight_match:
                     weight = weight_match.group(1).strip()
                 
+                # 提取最后出场位置（从位置轨迹中提取最后一个位置条目的场景名称）
+                location_section = re.search(r'位置轨迹：\s*\n([\s\S]*?)(?:\n\n|\n\[|$)', block)
+                if location_section:
+                    location_text = location_section.group(1).strip()
+                    location_entries = re.findall(r'- ([^（\(]+)(?:\(|（)', location_text)
+                    if location_entries:
+                        # 获取最后一个位置条目的场景名称
+                        last_location = location_entries[-1].strip()
+                
                 updated_chars[char_id] = {
                     "name": char_name,
                     "block": block,
@@ -442,7 +451,8 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                     "faction": faction,
                     "status": status,
                     "last_chapter": last_chapter,
-                    "weight": weight
+                    "weight": weight,
+                    "last_location": last_location
                 }
         
         # 确保角色数据库.txt文件存在并有基本结构
@@ -465,8 +475,8 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
 
 ## 角色索引表（唯一标识区）
 
-| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 权重等级 |
-|--------|----------|----------|----------|----------|------------|----------|
+| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 最后出场位置 | 权重等级 |
+|--------|----------|----------|----------|----------|------------|----------|----------|
 """
             save_string_to_txt(basic_structure, all_character_file)
             logging.info("已创建角色数据库.txt基本结构")
@@ -475,9 +485,21 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
         if os.path.exists(all_character_file) and updated_chars:
             character_db_content = read_file(all_character_file)
             
-            # 查找表格位置
-            table_header = "| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 权重等级 |"
-            table_separator = "|--------|----------|----------|----------|----------|------------|----------|"
+            # 定义新的表头和分隔符
+            new_table_header = "| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 最后出场位置 | 权重等级 |"
+            new_table_separator = "|--------|----------|----------|----------|----------|------------|----------|----------|"
+            
+            # 定义旧的表头和分隔符，用于查找和替换
+            old_table_header_pattern = r"\| ID编号 \| 正式名称 \| 其他称谓集合 \| 势力归属 \| 当前状态 \| 最后出场章 \| 权重等级 \|"
+            old_table_separator_pattern = r"\|--------\|----------\|----------\|----------\|----------\|------------\|----------\|"
+            
+            # 替换旧的表头和分隔符（如果存在）
+            character_db_content = re.sub(old_table_header_pattern, "", character_db_content)
+            character_db_content = re.sub(old_table_separator_pattern, "", character_db_content)
+            
+            # 查找表格位置 (使用新的表头)
+            table_header = new_table_header
+            table_separator = new_table_separator
             
             # 如果表格不存在，则在角色索引表后创建表格
             if table_header not in character_db_content:
@@ -518,7 +540,7 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                             if char_id in updated_chars:
                                 # 更新现有角色行
                                 char_info = updated_chars[char_id]
-                                new_table.append(f"| {char_id} | {char_info['name']} | {char_info['other_names']} | {char_info['faction']} | {char_info['status']} | {char_info['last_chapter']} | {char_info['weight']} |")
+                                new_table.append(f"| {char_id} | {char_info['name']} | {char_info['other_names']} | {char_info['faction']} | {char_info['status']} | {char_info['last_chapter']} | {char_info['last_location']} | {char_info['weight']} |")
                                 existing_ids.add(char_id)
                             else:
                                 # 保留未更新的角色行
@@ -527,7 +549,7 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                 # 添加新角色行
                 for char_id, char_info in updated_chars.items():
                     if char_id not in existing_ids:
-                        new_table.append(f"| {char_id} | {char_info['name']} | {char_info['other_names']} | {char_info['faction']} | {char_info['status']} | {char_info['last_chapter']} | {char_info['weight']} |")
+                        new_table.append(f"| {char_id} | {char_info['name']} | {char_info['other_names']} | {char_info['faction']} | {char_info['status']} | {char_info['last_chapter']} | {char_info['last_location']} | {char_info['weight']} |")
                 
                 new_table_text = "\n".join(new_table)
                 
@@ -593,6 +615,7 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                 status = "活跃"
                 last_chapter = f"第{chap_num}章"
                 weight = "50"
+                last_location = "未知"
                 
                 # 提取称谓
                 other_names_match = re.search(r'称谓：([^\n]+)', block)
@@ -618,6 +641,15 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                 if weight_match:
                     weight = weight_match.group(1).strip()
                 
+                # 提取最后出场位置（从位置轨迹中提取最后一个位置条目的场景名称）
+                location_section = re.search(r'位置轨迹：\s*\n([\s\S]*?)(?:\n\n|\n\[|$)', block)
+                if location_section:
+                    location_text = location_section.group(1).strip()
+                    location_entries = re.findall(r'- ([^（\(]+)(?:\(|（)', location_text)
+                    if location_entries:
+                        # 获取最后一个位置条目的场景名称
+                        last_location = location_entries[-1].strip()
+                
                 updated_chars[char_id] = {
                     "name": char_name,
                     "block": block,
@@ -625,7 +657,8 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                     "faction": faction,
                     "status": status,
                     "last_chapter": last_chapter,
-                    "weight": weight
+                    "weight": weight,
+                    "last_location": last_location
                 }
         
         # 确保角色数据库.txt文件存在并有基本结构
@@ -648,8 +681,8 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
 
 ## 角色索引表（唯一标识区）
 
-| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 权重等级 |
-|--------|----------|----------|----------|----------|------------|----------|
+| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 最后出场位置 | 权重等级 |
+|--------|----------|----------|----------|----------|------------|----------|----------|
 """
             save_string_to_txt(basic_structure, all_character_file)
             logging.info("已创建角色数据库.txt基本结构")
@@ -658,9 +691,21 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
         if os.path.exists(all_character_file) and updated_chars:
             character_db_content = read_file(all_character_file)
             
-            # 查找表格位置
-            table_header = "| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 权重等级 |"
-            table_separator = "|--------|----------|----------|----------|----------|------------|----------|"
+            # 定义新的表头和分隔符
+            new_table_header = "| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 最后出场位置 | 权重等级 |"
+            new_table_separator = "|--------|----------|----------|----------|----------|------------|----------|----------|"
+            
+            # 定义旧的表头和分隔符，用于查找和替换
+            old_table_header_pattern = r"\| ID编号 \| 正式名称 \| 其他称谓集合 \| 势力归属 \| 当前状态 \| 最后出场章 \| 权重等级 \|"
+            old_table_separator_pattern = r"\|--------\|----------\|----------\|----------\|----------\|------------\|----------\|"
+            
+            # 替换旧的表头和分隔符（如果存在）
+            character_db_content = re.sub(old_table_header_pattern, "", character_db_content)
+            character_db_content = re.sub(old_table_separator_pattern, "", character_db_content)
+            
+            # 查找表格位置 (使用新的表头)
+            table_header = new_table_header
+            table_separator = new_table_separator
             
             # 如果表格不存在，则在角色索引表后创建表格
             if table_header not in character_db_content:
@@ -723,7 +768,7 @@ def update_character_states(chapter_text, chapter_title, chap_num, filepath, llm
                 for char_name, char_id in character_ids.items():
                     if char_id not in existing_ids and char_id not in updated_chars:
                         # 为新角色创建一个基本行
-                        new_line = f"| {char_id} | {char_name} | | 无归属 | 活跃 | 第{chap_num}章 | 50 |"
+                        new_line = f"| {char_id} | {char_name} | | 无归属 | 活跃 | 第{chap_num}章 | 未知 | 50 |"
                         new_table.append(new_line)
                         logging.info(f"添加新角色到表格: {char_name} ({char_id})")
                 

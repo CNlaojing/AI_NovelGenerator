@@ -4,6 +4,7 @@ import os
 import threading
 import logging
 import traceback
+import sys
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -20,15 +21,18 @@ from ui.config_tab import build_config_tabview, load_config_btn, save_config_btn
 from ui.novel_params_tab import build_novel_params_area, build_optional_buttons_area
 from ui.generation_handlers import (
     generate_novel_architecture_ui,
-    generate_volume_ui,  # 添加导入
+    generate_volume_ui,
     generate_chapter_blueprint_ui,
     generate_chapter_draft_ui,
     finalize_chapter_ui,
     do_consistency_check,
     show_plot_arcs_ui,
-    rewrite_chapter_ui,  # 添加这行
-    show_rewrite_prompt_editor, # 添加这行
-    execute_chapter_rewrite # 添加这行
+    rewrite_chapter_ui,
+    show_rewrite_prompt_editor,
+    execute_chapter_rewrite,
+    show_consistency_check_results_ui,
+    import_knowledge_handler,
+    clear_vectorstore_handler,
 )
 from ui.setting_tab import build_setting_tab, load_novel_architecture, save_novel_architecture
 from ui.directory_tab import build_directory_tab, load_chapter_blueprint, save_chapter_blueprint, load_text_file
@@ -45,16 +49,16 @@ class NovelGeneratorGUI:
         self.master = master
         self.master.title("Novel Generator GUI")
         try:
-            # 使用 stderr 重定向来捕获 libpng 警告
-            import sys
-            import os
-            stderr = sys.stderr
-            null = open(os.devnull, 'w')
-            sys.stderr = null
+            # 使用 stderr 重定向来捕获 libpng 警告 (已注释掉以排查终端乱码问题)
+            # import sys
+            # import os
+            # stderr = sys.stderr
+            # null = open(os.devnull, 'w')
+            # sys.stderr = null
             if os.path.exists("icon.ico"):
                 self.master.iconbitmap("icon.ico")
-            sys.stderr = stderr
-            null.close()
+            # sys.stderr = stderr
+            # null.close()
         except Exception:
             pass
         self.master.geometry("1350x840")
@@ -173,6 +177,21 @@ class NovelGeneratorGUI:
         build_main_tab(self)
         build_config_tabview(self)
         build_novel_params_area(self, start_row=1)
+        # 绑定生成器处理函数
+        self.generate_novel_architecture_ui = generate_novel_architecture_ui.__get__(self)
+        self.generate_volume_ui = generate_volume_ui.__get__(self)
+        self.generate_chapter_blueprint_ui = generate_chapter_blueprint_ui.__get__(self)
+        self.generate_chapter_draft_ui = generate_chapter_draft_ui.__get__(self)
+        self.finalize_chapter_ui = finalize_chapter_ui.__get__(self)
+        self.do_consistency_check = do_consistency_check.__get__(self)
+        self.import_knowledge_handler = import_knowledge_handler.__get__(self)
+        self.clear_vectorstore_handler = clear_vectorstore_handler.__get__(self)
+        self.show_plot_arcs_ui = show_plot_arcs_ui.__get__(self)
+        self.rewrite_chapter_ui = rewrite_chapter_ui.__get__(self)
+        self.show_rewrite_prompt_editor = show_rewrite_prompt_editor.__get__(self)
+        self.execute_chapter_rewrite = execute_chapter_rewrite.__get__(self)
+        self.show_consistency_check_results_ui = show_consistency_check_results_ui.__get__(self)
+
         build_optional_buttons_area(self, start_row=2)
         build_setting_tab(self)
         build_volume_tab(self)
@@ -180,26 +199,6 @@ class NovelGeneratorGUI:
         build_character_tab(self)
         build_summary_tab(self)
         build_chapters_tab(self)
-
-        # 添加新方法绑定
-        from ui.generation_handlers import (
-            generate_novel_architecture_ui,
-            generate_chapter_blueprint_ui,
-            generate_chapter_draft_ui,
-            finalize_chapter_ui,
-            do_consistency_check,
-            import_knowledge_handler,
-            clear_vectorstore_handler,
-            show_plot_arcs_ui,
-            generate_volume_ui,
-            rewrite_chapter_ui,  # 添加这行
-            show_rewrite_prompt_editor,  # 添加这行
-            execute_chapter_rewrite  # 添加这行
-        )
-
-        # 绑定生成器处理函数
-        self.generate_novel_architecture_ui = generate_novel_architecture_ui.__get__(self)
-        self.generate_chapter_blueprint_ui = generate_chapter_blueprint_ui.__get__(self)
         self.generate_chapter_draft_ui = generate_chapter_draft_ui.__get__(self)
         self.finalize_chapter_ui = finalize_chapter_ui.__get__(self)
         self.do_consistency_check = do_consistency_check.__get__(self)
@@ -296,6 +295,26 @@ class NovelGeneratorGUI:
         selected_dir = filedialog.askdirectory()
         if (selected_dir):
             self.filepath_var.set(selected_dir)
+
+    def open_filepath_in_explorer(self):
+        filepath = self.filepath_var.get()
+        if not filepath:
+            messagebox.showwarning("警告", "保存路径为空，无法打开。")
+            return
+        if not os.path.exists(filepath):
+            messagebox.showwarning("警告", f"路径不存在：{filepath}")
+            return
+        try:
+            os.startfile(filepath) # For Windows
+        except AttributeError:
+            # For macOS and Linux
+            import subprocess
+            if sys.platform == "darwin": # macOS
+                subprocess.Popen(["open", filepath])
+            elif sys.platform.startswith("linux"): # Linux
+                subprocess.Popen(["xdg-open", filepath])
+        except Exception as e:
+            messagebox.showerror("错误", f"无法打开路径：{e}")
 
     def show_character_import_window(self):
         """显示角色导入窗口"""
@@ -428,7 +447,8 @@ class NovelGeneratorGUI:
         title_text = (
             "AI_NovelGenerator (CNlaojing Fork)\n"
             "基于 YILING0013/AI_NovelGenerator 的自动小说生成工具增强版本\n"
-            "本项目是Fork分支，由 CNlaojing 维护。"
+            "本项目是Fork分支，由 CNlaojing 维护。\n"
+            "非正常渠道获取的本项目软件，谢绝打赏。"
         )
         title_label = ctk.CTkLabel(
             donate_window, 
@@ -495,6 +515,7 @@ class NovelGeneratorGUI:
     test_llm_config = test_llm_config
     test_embedding_config = test_embedding_config
     browse_folder = browse_folder
+    open_filepath_in_explorer = open_filepath_in_explorer
     show_volume_tab = show_volume_tab
     load_volume = load_volume
     save_volume = save_volume

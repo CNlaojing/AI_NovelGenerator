@@ -196,7 +196,7 @@ def build_embeddings_config_tab(self):
 
     # 1) Embedding API Key
     create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding API Key:", tooltip_key="embedding_api_key", row=0, column=0, font=("Microsoft YaHei", 12))
-    emb_api_key_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_api_key_var, font=("Microsoft YaHei", 12))
+    emb_api_key_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_api_key_var, font=("Microsoft YaHei", 12), show="*")
     emb_api_key_entry.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
 
     # 2) Embedding 接口格式

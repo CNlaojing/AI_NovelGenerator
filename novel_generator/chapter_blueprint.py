@@ -1223,6 +1223,10 @@ def generate_volume_chapters(
             dialog = ctk.CTkToplevel()
             dialog.title("编辑章节生成提示词")
             dialog.geometry("800x600")
+            dialog.attributes('-topmost', True)  # 设置为置顶窗口
+            
+            # 禁止最小化窗口
+            dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
             
             # 使用 CTkTextbox 替代 ttk.Text
             textbox = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 12))

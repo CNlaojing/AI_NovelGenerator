@@ -122,8 +122,20 @@ def do_consistency_check(self, *args, **kwargs):
     # 调用 consistency_checker.py 中的 do_consistency_check 函数
     from novel_generator.consistency_checker import do_consistency_check as cc_do_consistency_check
     
-    # 将 self 对象传递给 consistency_checker 中的函数
-    return cc_do_consistency_check(self)
+    # 禁用按钮
+    if hasattr(self, 'btn_consistency_check') and self.btn_consistency_check:
+        self.disable_button_safe(self.btn_consistency_check)
+    
+    def task_wrapper():
+        try:
+            # 将 self 对象传递给 consistency_checker 中的函数
+            cc_do_consistency_check(self)
+        finally:
+            # 确保按钮在任务完成或出错时都恢复
+            if hasattr(self, 'btn_consistency_check') and self.btn_consistency_check:
+                self.enable_button_safe(self.btn_consistency_check)
+                
+    threading.Thread(target=task_wrapper, daemon=True).start()
 from novel_generator.rewrite import rewrite_chapter  # 添加导入
 
 # 检查是否定义了 generate_volume_ui，如果没有则补充一个空实现，防止 ImportError
@@ -149,6 +161,10 @@ def generate_volume_ui(self):
             dialog.geometry("400x250")
             dialog.transient(self.master)
             dialog.grab_set()
+            dialog.attributes('-topmost', True)  # 设置为置顶窗口
+            
+            # 禁止最小化窗口
+            dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
             
             # 创建角色数量输入变量
             character_count_var = tk.StringVar(value="8")
@@ -253,6 +269,10 @@ def generate_volume_ui(self):
                 editor_dialog.geometry("800x600")
                 editor_dialog.transient(self.master)
                 editor_dialog.grab_set()
+                editor_dialog.attributes('-topmost', True)  # 设置为置顶窗口
+                
+                # 禁止最小化窗口
+                editor_dialog.protocol("WM_ICONIFY_WINDOW", lambda: editor_dialog.deiconify())
                 
                 # 准备volume_outline_prompt
                 from prompt_definitions import volume_outline_prompt, volume_design_format
@@ -505,6 +525,10 @@ def generate_volume_ui(self):
                     editor_dialog.geometry("800x600")
                     editor_dialog.transient(self.master)
                     editor_dialog.grab_set()
+                    editor_dialog.attributes('-topmost', True)  # 设置为置顶窗口
+                    
+                    # 禁止最小化窗口
+                    editor_dialog.protocol("WM_ICONIFY_WINDOW", lambda: editor_dialog.deiconify())
                     
                     # 准备subsequent_volume_prompt
                     from prompt_definitions import subsequent_volume_prompt, final_volume_prompt, volume_design_format
@@ -1010,6 +1034,10 @@ def show_rewrite_prompt_editor(self, prompt_text, chapter_num, filepath, chapter
     dialog.geometry("800x600")
     dialog.transient(self.master)  # 使弹窗相对于主窗口
     dialog.grab_set()  # 使弹窗成为模态窗口，阻止与主窗口交互
+    dialog.attributes('-topmost', True)  # 设置为置顶窗口
+    
+    # 禁止最小化窗口
+    dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
 
     # 定义取消操作
     def on_cancel():
@@ -1068,15 +1096,6 @@ def execute_chapter_rewrite(self, prompt, chapter_num, filepath, chapter_file_pa
             embedding_model_name = self.embedding_model_name_var.get().strip()
             
             from novel_generator.rewrite import rewrite_chapter # 修改导入
-            # 注意：rewrite_chapter 函数的参数与 rewrite_chapter_content 可能不同
-            # 这里假设 rewrite_chapter 需要 current_text, filepath, novel_number
-            # 您可能需要根据 rewrite_chapter 函数的实际定义调整参数
-            # 获取当前章节内容，这里用 chapter_content (即 prompt) 作为示例，实际可能需要从文件读取
-            # The 'prompt' here is actually the modified prompt for rewriting, not the original chapter content.
-            # The rewrite_chapter function in novel_generator.rewrite should handle getting the original content if needed, or accept it.
-            # Based on the parameters, current_text=prompt seems to be what was intended for the LLM call.
-            # The core issue is updating UI and saving. The call to rewrite_chapter itself is assumed to be mostly correct for generation.
-            
             rewritten_content = rewrite_chapter(
                 current_text=prompt, # This 'prompt' is the full text sent to LLM for rewriting
                 filepath=filepath,
@@ -1132,7 +1151,13 @@ def show_plot_arcs_ui(self):
             # 创建剧情要点展示窗口
             dialog = ctk.CTkToplevel(self.master)
             dialog.title("剧情要点展示")
-            dialog.geometry("800x600")
+            dialog.geometry("800x650") # Adjusted height for buttons
+            dialog.transient(self.master)
+            dialog.grab_set()
+            dialog.attributes('-topmost', True)  # 设置为置顶窗口
+            
+            # 禁止最小化窗口
+            dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
             
             # 添加剧情要点展示组件
             text_box = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 12))
@@ -1145,9 +1170,94 @@ def show_plot_arcs_ui(self):
                     text_box.insert("0.0", f.read())
             else:
                 text_box.insert("0.0", "未找到剧情要点文件")
+
+            # 按钮框架
+            button_frame = ctk.CTkFrame(dialog)
+            button_frame.pack(pady=10)
+
+            # 保存按钮
+            def save_content():
+                content = text_box.get("0.0", "end-1c")
+                try:
+                    with open(plot_points_file, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    self.safe_log(f"✅ 剧情要点已保存到 {plot_points_file}")
+                    messagebox.showinfo("成功", "剧情要点已保存", parent=dialog)
+                except Exception as e_save:
+                    self.safe_log(f"❌ 保存剧情要点失败: {str(e_save)}")
+                    messagebox.showerror("错误", f"保存失败: {str(e_save)}", parent=dialog)
+            
+            save_button = ctk.CTkButton(button_frame, text="保存", command=save_content, font=("Microsoft YaHei", 12))
+            save_button.pack(side="left", padx=10)
+
+            # 退出按钮
+            exit_button = ctk.CTkButton(button_frame, text="退出", command=dialog.destroy, font=("Microsoft YaHei", 12))
+            exit_button.pack(side="left", padx=10)
                 
         except Exception as e:
             self.handle_exception(f"显示剧情要点时出错: {str(e)}")
+    
+    threading.Thread(target=task, daemon=True).start()
+
+def show_consistency_check_results_ui(self):
+    """
+    显示一致性审校结果UI界面
+    """
+    filepath = self.filepath_var.get().strip()
+    if not filepath:
+        messagebox.showwarning("警告", "请先选择保存文件路径")
+        return
+
+    def task():
+        try:
+            # 创建一致性审校结果展示窗口
+            dialog = ctk.CTkToplevel(self.master)
+            dialog.title("一致性审校结果")
+            dialog.geometry("800x650") # Adjusted height for buttons
+            dialog.transient(self.master)
+            dialog.grab_set()
+            dialog.attributes('-topmost', True)  # 设置为置顶窗口
+            
+            # 禁止最小化窗口
+            dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
+            
+            # 添加文本展示组件
+            text_box = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 12))
+            text_box.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # 读取并显示一致性审校文件
+            consistency_file = os.path.join(filepath, "一致性审校.txt")
+            if os.path.exists(consistency_file):
+                with open(consistency_file, 'r', encoding='utf-8') as f:
+                    text_box.insert("0.0", f.read())
+            else:
+                text_box.insert("0.0", "未找到一致性审校.txt文件")
+
+            # 按钮框架
+            button_frame = ctk.CTkFrame(dialog)
+            button_frame.pack(pady=10)
+
+            # 保存按钮
+            def save_content():
+                content = text_box.get("0.0", "end-1c")
+                try:
+                    with open(consistency_file, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    self.safe_log(f"✅ 一致性审校结果已保存到 {consistency_file}")
+                    messagebox.showinfo("成功", "一致性审校结果已保存", parent=dialog)
+                except Exception as e_save:
+                    self.safe_log(f"❌ 保存一致性审校结果失败: {str(e_save)}")
+                    messagebox.showerror("错误", f"保存失败: {str(e_save)}", parent=dialog)
+            
+            save_button = ctk.CTkButton(button_frame, text="保存", command=save_content, font=("Microsoft YaHei", 12))
+            save_button.pack(side="left", padx=10)
+
+            # 退出按钮
+            exit_button = ctk.CTkButton(button_frame, text="退出", command=dialog.destroy, font=("Microsoft YaHei", 12))
+            exit_button.pack(side="left", padx=10)
+                
+        except Exception as e:
+            self.handle_exception(f"显示一致性审校结果时出错: {str(e)}")
     
     threading.Thread(target=task, daemon=True).start()
 
@@ -1239,7 +1349,7 @@ def finalize_chapter_ui(self):
                 embedding_adapter = create_embedding_adapter(
                     interface_format=self.embedding_interface_format_var.get(),
                     api_key=self.embedding_api_key_var.get(),
-                    base_url=self.embedding_api_key_var.get(),
+                    base_url=self.embedding_url_var.get(),
                     model_name=self.embedding_model_name_var.get()
                 )
                 vectorstore = None # Initialize to None as the novel_collection load is removed
@@ -1347,14 +1457,16 @@ def finalize_chapter_ui(self):
                 if embedding_adapter and not vectorstore:
                     from novel_generator.vectorstore_utils import init_vector_store
                     logging.info("向量库不存在，尝试初始化新的向量库...")
-                    # 使用章节文本初始化向量库
-                    vectorstore = init_vector_store(embedding_adapter, [chapter_text], filepath, collection_name="foreshadowing_collection")
-                    if vectorstore:
-                        logging.info("成功初始化新的向量库")
+                    # 不使用章节文本初始化向量库，让process_and_vectorize_foreshadowing函数处理
+                    # 检查向量库是否存在
+                    from novel_generator.vectorstore_utils import load_vector_store
+                    vectorstore = load_vector_store(embedding_adapter, filepath, collection_name="foreshadowing_collection")
+                    if not vectorstore:
+                        logging.info("伏笔向量库不存在，将在处理伏笔时自动创建")
                     else:
-                        logging.warning("初始化向量库失败")
+                        logging.info("成功加载现有伏笔向量库")
                 
-                if vectorstore and foreshadowing_str:
+                if foreshadowing_str:  # 只要有伏笔信息就处理，不管向量库是否存在
                     try:
                         logging.info("开始调用伏笔内容处理和向量化函数...")
                         # 详细记录伏笔信息
@@ -1760,6 +1872,10 @@ def generate_chapter_blueprint_ui(self):
             dialog.geometry("480x350")
             dialog.transient(self.master)
             dialog.grab_set()
+            dialog.attributes('-topmost', True)  # 设置为置顶窗口
+            
+            # 禁止最小化窗口
+            dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
 
             # 章节数量输入
             entry_frame = ctk.CTkFrame(dialog)
@@ -1920,7 +2036,7 @@ def generate_chapter_blueprint_ui(self):
                                         embedding_adapter = create_embedding_adapter(
                                             interface_format=self.embedding_interface_format_var.get(),
                                             api_key=self.embedding_api_key_var.get(),
-                                            base_url=self.embedding_api_key_var.get(),
+                                            base_url=self.embedding_url_var.get(),
                                             model_name=self.embedding_model_name_var.get()
                                         )
                                         
@@ -2227,6 +2343,10 @@ def generate_chapter_draft_ui(self):
         dialog.geometry("800x600")
         dialog.transient(self.master)  # 使弹窗相对于主窗口
         dialog.grab_set()  # 使弹窗成为模态窗口，阻止与主窗口交互
+        dialog.attributes('-topmost', True)  # 设置为置顶窗口
+        
+        # 禁止最小化窗口
+        dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
 
         # 定义取消操作
         def on_cancel():

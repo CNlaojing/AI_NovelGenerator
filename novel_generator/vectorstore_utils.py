@@ -79,6 +79,9 @@ def init_vector_store(embedding_adapter, texts: List[str], filepath: str, collec
 
             def __call__(self, input: List[str]) -> List[List[float]]:
                 return self.embedding_adapter.embed_documents(input)
+                
+            def name(self) -> str:
+                return "custom_embedding_function"
 
         # 使用最简单的客户端构造方式
         logging.info("创建 ChromaDB 客户端...")
@@ -92,12 +95,12 @@ def init_vector_store(embedding_adapter, texts: List[str], filepath: str, collec
             chroma_client.get_collection(name=collection_name) # 检查是否存在
             logging.info(f"找到现有集合: {collection_name}，将重置该集合。")
             chroma_client.delete_collection(name=collection_name) # 如果存在则删除
-        except (chromadb.errors.NotFoundError, chromadb.errors.InvalidCollectionException) as e:
-            # 如果集合不存在 (NotFoundError 或 InvalidCollectionException 表明不存在)
+        except chromadb.errors.NotFoundError as e:
+            # 如果集合不存在 (NotFoundError 表明不存在)
             if "does not exist" in str(e).lower():
                 logging.info(f"未找到现有集合 '{collection_name}'，将创建新集合。详细信息: {e}")
             else:
-                # 对于其他类型的 NotFoundError 或 InvalidCollectionException，记录并返回 None
+                # 对于其他类型的 NotFoundError，记录并返回 None
                 logging.error(f"检查或删除集合 '{collection_name}' 时发生非预期的 '不存在' 类型错误: {e}")
                 traceback.print_exc()
                 return None 
@@ -201,6 +204,9 @@ def load_vector_store(embedding_adapter, filepath: str, collection_name: str):
 
             def __call__(self, input: List[str]) -> List[List[float]]:
                 return self.embedding_adapter.embed_documents(input)
+                
+            def name(self) -> str:
+                return "custom_embedding_function"
 
         # 使用最简单的客户端构造方式
         logging.info(f"正在加载向量库: {store_dir}")

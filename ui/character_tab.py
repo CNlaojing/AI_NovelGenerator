@@ -41,7 +41,7 @@ def build_character_tab(self):
         command=lambda: self.load_character_file("角色数据库.txt"), 
         font=("Microsoft YaHei", 12)
     )
-    load_all_chars_btn.pack(side="left", padx=0)
+    load_all_chars_btn.pack(side="left", padx=(0,5))
 
     self.character_wordcount_label = ctk.CTkLabel(self.character_tab, text="字数：0", font=("Microsoft YaHei", 12))
     self.character_wordcount_label.grid(row=0, column=1, padx=5, pady=5, sticky="w")
