@@ -37,7 +37,7 @@ def build_left_layout(self):
     self.left_frame.grid_rowconfigure(4, weight=1)
     self.left_frame.columnconfigure(0, weight=1)
 
-    self.chapter_label = ctk.CTkLabel(self.left_frame, text="内容编辑框  字数：0", font=("Microsoft YaHei", 12))
+    self.chapter_label = ctk.CTkLabel(self.left_frame, text="内容编辑框  字数：0", font=("Microsoft YaHei", 14))
     self.chapter_label.grid(row=0, column=0, padx=5, pady=(5, 0), sticky="w")
 
     # 章节文本编辑框
@@ -64,7 +64,7 @@ def build_left_layout(self):
         self.step_buttons_frame,
         text="生成架构",
         command=self.generate_novel_architecture_ui,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     self.btn_generate_architecture.grid(row=0, column=0, padx=5, pady=2, sticky="ew")
 
@@ -72,7 +72,7 @@ def build_left_layout(self):
         self.step_buttons_frame,
         text="生成分卷",
         command=self.generate_volume_ui,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     self.btn_generate_volume.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
 
@@ -80,7 +80,7 @@ def build_left_layout(self):
         self.step_buttons_frame,
         text="生成目录", 
         command=self.generate_chapter_blueprint_ui,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     self.btn_generate_directory.grid(row=0, column=2, padx=5, pady=2, sticky="ew")
 
@@ -88,7 +88,7 @@ def build_left_layout(self):
         self.step_buttons_frame,
         text="生成草稿",  
         command=self.generate_chapter_draft_ui,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     self.btn_generate_chapter.grid(row=0, column=3, padx=5, pady=2, sticky="ew")
 
@@ -96,7 +96,7 @@ def build_left_layout(self):
         self.step_buttons_frame, 
         text="改写章节",
         command=self.rewrite_chapter_ui,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     self.btn_rewrite_chapter.grid(row=0, column=4, padx=5, pady=2, sticky="ew")
 
@@ -104,15 +104,15 @@ def build_left_layout(self):
         self.step_buttons_frame,
         text="定稿章节",  
         command=self.finalize_chapter_ui,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     self.btn_finalize_chapter.grid(row=0, column=5, padx=5, pady=2, sticky="ew")
 
     # 日志文本框
-    log_label = ctk.CTkLabel(self.left_frame, text="输出日志 (只读)", font=("Microsoft YaHei", 12))
+    log_label = ctk.CTkLabel(self.left_frame, text="输出日志 (只读)", font=("Microsoft YaHei", 14))
     log_label.grid(row=3, column=0, padx=5, pady=(5, 0), sticky="w")
 
-    self.log_text = ctk.CTkTextbox(self.left_frame, wrap="word", font=("Microsoft YaHei", 12))
+    self.log_text = ctk.CTkTextbox(self.left_frame, wrap="word", font=("Microsoft YaHei", 14))
     TextWidgetContextMenu(self.log_text)
     self.log_text.grid(row=4, column=0, sticky="nsew", padx=5, pady=(0, 5))
     self.log_text.configure(state="disabled")

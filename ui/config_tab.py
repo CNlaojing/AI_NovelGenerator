@@ -51,10 +51,10 @@ def build_config_tabview(self):
     self.btn_frame_config.columnconfigure(0, weight=1)
     self.btn_frame_config.columnconfigure(1, weight=1)
 
-    save_config_btn = ctk.CTkButton(self.btn_frame_config, text="保存当前选择接口配置到文件", command=self.save_config_btn, font=("Microsoft YaHei", 12))
+    save_config_btn = ctk.CTkButton(self.btn_frame_config, text="保存当前选择接口配置到文件", command=self.save_config_btn, font=("Microsoft YaHei", 14))
     save_config_btn.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
-    load_config_btn = ctk.CTkButton(self.btn_frame_config, text="加载当前选择接口配置到程序", command=self.load_config_btn, font=("Microsoft YaHei", 12))
+    load_config_btn = ctk.CTkButton(self.btn_frame_config, text="加载当前选择接口配置到程序", command=self.load_config_btn, font=("Microsoft YaHei", 14))
     load_config_btn.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
 def build_ai_config_tab(self):
@@ -103,57 +103,57 @@ def build_ai_config_tab(self):
     self.ai_config_tab.grid_columnconfigure(2, weight=0)
 
     # 1) API Key
-    create_label_with_help(self, parent=self.ai_config_tab, label_text="LLM API Key:", tooltip_key="api_key", row=0, column=0, font=("Microsoft YaHei", 12))
-    api_key_entry = ctk.CTkEntry(self.ai_config_tab, textvariable=self.api_key_var, font=("Microsoft YaHei", 12),show="*")
+    create_label_with_help(self, parent=self.ai_config_tab, label_text="LLM API Key:", tooltip_key="api_key", row=0, column=0, font=("Microsoft YaHei", 14))
+    api_key_entry = ctk.CTkEntry(self.ai_config_tab, textvariable=self.api_key_var, font=("Microsoft YaHei", 14),show="*")
     api_key_entry.grid(row=0, column=1, padx=5, pady=5, columnspan=2, sticky="nsew")
 
     # 2) Base URL
-    create_label_with_help(self, parent=self.ai_config_tab, label_text="LLM Base URL:", tooltip_key="base_url", row=1, column=0, font=("Microsoft YaHei", 12))
-    base_url_entry = ctk.CTkEntry(self.ai_config_tab, textvariable=self.base_url_var, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.ai_config_tab, label_text="LLM Base URL:", tooltip_key="base_url", row=1, column=0, font=("Microsoft YaHei", 14))
+    base_url_entry = ctk.CTkEntry(self.ai_config_tab, textvariable=self.base_url_var, font=("Microsoft YaHei", 14))
     base_url_entry.grid(row=1, column=1, padx=5, pady=5, columnspan=2, sticky="nsew")
 
     # 3) 接口格式
-    create_label_with_help(self, parent=self.ai_config_tab, label_text="LLM 接口格式:", tooltip_key="interface_format", row=2, column=0, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.ai_config_tab, label_text="LLM 接口格式:", tooltip_key="interface_format", row=2, column=0, font=("Microsoft YaHei", 14))
     # 在这里的接口选项列表中添加 "硅基流动"
     interface_options = ["DeepSeek", "阿里云百炼", "OpenAI", "Azure OpenAI", "Azure AI", "Ollama", "ML Studio", "Gemini", "火山引擎", "硅基流动"]
-    interface_dropdown = ctk.CTkOptionMenu(self.ai_config_tab, values=interface_options, variable=self.interface_format_var, command=on_interface_format_changed, font=("Microsoft YaHei", 12))
+    interface_dropdown = ctk.CTkOptionMenu(self.ai_config_tab, values=interface_options, variable=self.interface_format_var, command=on_interface_format_changed, font=("Microsoft YaHei", 14))
     interface_dropdown.grid(row=2, column=1, padx=5, pady=5, columnspan=2, sticky="nsew")
 
     # 4) Model Name
-    create_label_with_help(self, parent=self.ai_config_tab, label_text="Model Name:", tooltip_key="model_name", row=3, column=0, font=("Microsoft YaHei", 12))
-    model_name_entry = ctk.CTkEntry(self.ai_config_tab, textvariable=self.model_name_var, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.ai_config_tab, label_text="Model Name:", tooltip_key="model_name", row=3, column=0, font=("Microsoft YaHei", 14))
+    model_name_entry = ctk.CTkEntry(self.ai_config_tab, textvariable=self.model_name_var, font=("Microsoft YaHei", 14))
     model_name_entry.grid(row=3, column=1, padx=5, pady=5, columnspan=2, sticky="nsew")
 
     # 5) Temperature
-    create_label_with_help(self, parent=self.ai_config_tab, label_text="Temperature:", tooltip_key="temperature", row=4, column=0, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.ai_config_tab, label_text="Temperature:", tooltip_key="temperature", row=4, column=0, font=("Microsoft YaHei", 14))
     def update_temp_label(value):
         self.temp_value_label.configure(text=f"{float(value):.2f}")
     temp_scale = ctk.CTkSlider(self.ai_config_tab, from_=0.0, to=2.0, number_of_steps=200, command=update_temp_label, variable=self.temperature_var)
     temp_scale.grid(row=4, column=1, padx=5, pady=5, sticky="we")
-    self.temp_value_label = ctk.CTkLabel(self.ai_config_tab, text=f"{self.temperature_var.get():.2f}", font=("Microsoft YaHei", 12))
+    self.temp_value_label = ctk.CTkLabel(self.ai_config_tab, text=f"{self.temperature_var.get():.2f}", font=("Microsoft YaHei", 14))
     self.temp_value_label.grid(row=4, column=2, padx=5, pady=5, sticky="w")
 
     # 6) Max Tokens
-    create_label_with_help(self, parent=self.ai_config_tab, label_text="Max Tokens:", tooltip_key="max_tokens", row=5, column=0, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.ai_config_tab, label_text="Max Tokens:", tooltip_key="max_tokens", row=5, column=0, font=("Microsoft YaHei", 14))
     def update_max_tokens_label(value):
         self.max_tokens_value_label.configure(text=str(int(float(value))))
     max_tokens_slider = ctk.CTkSlider(self.ai_config_tab, from_=0, to=102400, number_of_steps=100, command=update_max_tokens_label, variable=self.max_tokens_var)
     max_tokens_slider.grid(row=5, column=1, padx=5, pady=5, sticky="we")
-    self.max_tokens_value_label = ctk.CTkLabel(self.ai_config_tab, text=str(self.max_tokens_var.get()), font=("Microsoft YaHei", 12))
+    self.max_tokens_value_label = ctk.CTkLabel(self.ai_config_tab, text=str(self.max_tokens_var.get()), font=("Microsoft YaHei", 14))
     self.max_tokens_value_label.grid(row=5, column=2, padx=5, pady=5, sticky="w")
 
     # 7) Timeout (sec)
-    create_label_with_help(self, parent=self.ai_config_tab, label_text="Timeout (sec):", tooltip_key="timeout", row=6, column=0, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.ai_config_tab, label_text="Timeout (sec):", tooltip_key="timeout", row=6, column=0, font=("Microsoft YaHei", 14))
     def update_timeout_label(value):
         integer_val = int(float(value))
         self.timeout_value_label.configure(text=str(integer_val))
     timeout_slider = ctk.CTkSlider(self.ai_config_tab, from_=0, to=3600, number_of_steps=3600, command=update_timeout_label, variable=self.timeout_var)
     timeout_slider.grid(row=6, column=1, padx=5, pady=5, sticky="we")
-    self.timeout_value_label = ctk.CTkLabel(self.ai_config_tab, text=str(self.timeout_var.get()), font=("Microsoft YaHei", 12))
+    self.timeout_value_label = ctk.CTkLabel(self.ai_config_tab, text=str(self.timeout_var.get()), font=("Microsoft YaHei", 14))
     self.timeout_value_label.grid(row=6, column=2, padx=5, pady=5, sticky="w")
 
     # 添加测试按钮
-    test_btn = ctk.CTkButton(self.ai_config_tab, text="测试配置", command=self.test_llm_config, font=("Microsoft YaHei", 12))
+    test_btn = ctk.CTkButton(self.ai_config_tab, text="测试配置", command=self.test_llm_config, font=("Microsoft YaHei", 14))
     test_btn.grid(row=7, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
 
 def build_embeddings_config_tab(self):
@@ -195,35 +195,35 @@ def build_embeddings_config_tab(self):
     self.embeddings_config_tab.grid_columnconfigure(2, weight=0)
 
     # 1) Embedding API Key
-    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding API Key:", tooltip_key="embedding_api_key", row=0, column=0, font=("Microsoft YaHei", 12))
-    emb_api_key_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_api_key_var, font=("Microsoft YaHei", 12), show="*")
+    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding API Key:", tooltip_key="embedding_api_key", row=0, column=0, font=("Microsoft YaHei", 14))
+    emb_api_key_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_api_key_var, font=("Microsoft YaHei", 14))
     emb_api_key_entry.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
 
     # 2) Embedding 接口格式
-    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding 接口格式:", tooltip_key="embedding_interface_format", row=1, column=0, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding 接口格式:", tooltip_key="embedding_interface_format", row=1, column=0, font=("Microsoft YaHei", 14))
 
     emb_interface_options = ["DeepSeek", "OpenAI", "Azure OpenAI", "Gemini", "Ollama", "ML Studio","SiliconFlow"]
 
-    emb_interface_dropdown = ctk.CTkOptionMenu(self.embeddings_config_tab, values=emb_interface_options, variable=self.embedding_interface_format_var, command=on_embedding_interface_changed, font=("Microsoft YaHei", 12))
+    emb_interface_dropdown = ctk.CTkOptionMenu(self.embeddings_config_tab, values=emb_interface_options, variable=self.embedding_interface_format_var, command=on_embedding_interface_changed, font=("Microsoft YaHei", 14))
     emb_interface_dropdown.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
 
     # 3) Embedding Base URL
-    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding Base URL:", tooltip_key="embedding_url", row=2, column=0, font=("Microsoft YaHei", 12))
-    emb_url_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_url_var, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding Base URL:", tooltip_key="embedding_url", row=2, column=0, font=("Microsoft YaHei", 14))
+    emb_url_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_url_var, font=("Microsoft YaHei", 14))
     emb_url_entry.grid(row=2, column=1, padx=5, pady=5, sticky="nsew")
 
     # 4) Embedding Model Name
-    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding Model Name:", tooltip_key="embedding_model_name", row=3, column=0, font=("Microsoft YaHei", 12))
-    emb_model_name_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_model_name_var, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Embedding Model Name:", tooltip_key="embedding_model_name", row=3, column=0, font=("Microsoft YaHei", 14))
+    emb_model_name_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_model_name_var, font=("Microsoft YaHei", 14))
     emb_model_name_entry.grid(row=3, column=1, padx=5, pady=5, sticky="nsew")
 
     # 5) Retrieval Top-K
-    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Retrieval Top-K:", tooltip_key="embedding_retrieval_k", row=4, column=0, font=("Microsoft YaHei", 12))
-    emb_retrieval_k_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_retrieval_k_var, font=("Microsoft YaHei", 12))
+    create_label_with_help(self, parent=self.embeddings_config_tab, label_text="Retrieval Top-K:", tooltip_key="embedding_retrieval_k", row=4, column=0, font=("Microsoft YaHei", 14))
+    emb_retrieval_k_entry = ctk.CTkEntry(self.embeddings_config_tab, textvariable=self.embedding_retrieval_k_var, font=("Microsoft YaHei", 14))
     emb_retrieval_k_entry.grid(row=4, column=1, padx=5, pady=5, sticky="nsew")
 
     # 添加测试按钮
-    test_btn = ctk.CTkButton(self.embeddings_config_tab, text="测试配置", command=self.test_embedding_config, font=("Microsoft YaHei", 12))
+    test_btn = ctk.CTkButton(self.embeddings_config_tab, text="测试配置", command=self.test_embedding_config, font=("Microsoft YaHei", 14))
     test_btn.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
 def load_config_btn(self):

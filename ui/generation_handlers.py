@@ -115,6 +115,301 @@ from novel_generator.chapter_blueprint import (
 )
 from novel_generator.consistency_checker import check_consistency
 
+
+def repair_character_database(self):
+    """
+    修复角色数据库.txt的处理函数
+    1. 清空待用角色.txt
+    2. 检索角色向量库内所有角色的内容保存至待用角色.txt
+    3. 分析待用角色.txt内容，修复角色数据库.txt
+    """
+    filepath = self.filepath_var.get().strip()
+    if not filepath:
+        messagebox.showwarning("警告", "请先选择保存文件路径")
+        return
+
+    def task():
+        try:
+            if not messagebox.askyesno("确认", "确定要修复角色数据库吗？此操作将清空待用角色.txt并重建角色数据库.txt"):
+                return
+                
+            self.safe_log("开始修复角色数据库...")
+            
+            # 1. 清空待用角色.txt
+            standby_char_file = os.path.join(filepath, "待用角色.txt")
+            clear_file_content(standby_char_file)
+            self.safe_log("已清空待用角色.txt")
+            
+            # 2. 创建嵌入适配器
+            embedding_adapter = create_embedding_adapter(
+                interface_format=self.embedding_interface_format_var.get(),
+                api_key=self.embedding_api_key_var.get(),
+                base_url=self.embedding_url_var.get(),
+                model_name=self.embedding_model_name_var.get()
+            )
+            
+            if embedding_adapter is None:
+                self.safe_log("❌ 无法创建嵌入适配器，请检查配置")
+                return
+            
+            # 3. 加载角色状态向量库
+            vectorstore = load_vector_store(embedding_adapter, filepath, "character_state_collection")
+            
+            if vectorstore is None:
+                self.safe_log("❌ 无法加载角色状态向量库，请确保已有角色数据")
+                return
+            
+            # 4. 获取所有角色状态文档
+            try:
+                results = vectorstore.get(where={"type": "character_state"}, include=["metadatas", "documents"])
+                
+                if not results or not results.get('documents') or len(results.get('documents', [])) == 0:
+                    self.safe_log("❌ 角色状态向量库中没有找到角色数据")
+                    return
+                    
+                self.safe_log(f"找到 {len(results['documents'])} 个角色状态文档")
+                
+                # 5. 将所有角色状态保存到待用角色.txt
+                all_character_states = "\n\n".join(results['documents'])
+                save_string_to_txt(all_character_states, standby_char_file)
+                self.safe_log(f"已将所有角色状态保存到待用角色.txt")
+                
+                # 6. 分析待用角色.txt内容，修复角色数据库.txt
+                all_character_file = os.path.join(filepath, "角色数据库.txt")
+                
+                # 解析角色状态，提取每个角色的信息
+                char_blocks = re.split(r'\n\s*\n', all_character_states)
+                updated_chars = {}
+                
+                for block in char_blocks:
+                    # 尝试提取角色ID和名称
+                    id_match = re.match(r'(ID\d+)\s*[：:]\s*([^\n]+)', block)
+                    if id_match:
+                        char_id = id_match.group(1)
+                        char_name = id_match.group(2).strip()
+                        
+                        # 提取其他信息
+                        other_names = ""
+                        faction = "无归属"
+                        status = "活跃"
+                        last_chapter = "未知"
+                        weight = "50"
+                        last_location = "未知"
+                        
+                        # 提取称谓
+                        other_names_match = re.search(r'称谓：([^\n]+)', block)
+                        if other_names_match:
+                            other_names = other_names_match.group(1).strip()
+                        
+                        # 提取势力归属
+                        faction_match = re.search(r'势力归属：\s*\n\s*籍贯/家乡：[^\n]*\s*\n\s*所属势力：([^\n]+)', block)
+                        if faction_match:
+                            faction = faction_match.group(1).strip()
+                        
+                        # 提取身体状态
+                        status_match = re.search(r'身体状态：([^\n]+)', block)
+                        if status_match:
+                            status = status_match.group(1).strip()
+                        elif re.search(r'当前状态', block):
+                            status_match = re.search(r'当前状态\s*\n([^\n]+)', block)
+                            if status_match:
+                                status = status_match.group(1).strip()
+                        
+                        # 提取最后出场章节
+                        chapter_match = re.search(r'最后出场章节：([^\n]+)', block)
+                        if chapter_match:
+                            last_chapter = chapter_match.group(1).strip()
+                        
+                        # 提取角色权重
+                        weight_match = re.search(r'角色权重：(\d+)', block)
+                        if weight_match:
+                            weight = weight_match.group(1).strip()
+                        
+                        # 提取最后出场位置（从位置轨迹中提取最后一个位置条目的场景名称）
+                        location_section = re.search(r'位置轨迹：\s*\n([\s\S]*?)(?=\n\n|\n[^-\s]|$)', block)
+                        if location_section:
+                            location_text = location_section.group(1).strip()
+                            # 提取位置轨迹中的每一行，格式为：- 场景名称（时间线：第X章）（事件：摘要）（同行人物）（目的）
+                            location_entries = re.findall(r'- ([^（\(]+)(?:\(|（)', location_text)
+                            if location_entries:
+                                # 获取最后一个位置条目的场景名称
+                                last_location = location_entries[-1].strip()
+                        
+                        updated_chars[char_id] = {
+                            "name": char_name,
+                            "block": block,
+                            "other_names": other_names,
+                            "faction": faction,
+                            "status": status,
+                            "last_chapter": last_chapter,
+                            "weight": weight,
+                            "last_location": last_location
+                        }
+                
+                # 确保角色数据库.txt文件存在并有基本结构
+                if not os.path.exists(all_character_file) or not read_file(all_character_file).strip():
+                    # 创建基本结构
+                    basic_structure = """# 角色数据库
+## 分类统计
+### 权重分布
+主角级（96-100）：0
+关键角色（81-95）：0
+核心配角（61-80）：0
+次要配角（41-60）：0
+单元角色（21-40）：0
+背景角色（1-20）：0
+### 角色信息
+角色总数：0
+核心角色（权重≥81）：0
+活跃角色（最近X章出场）：0
+势力分类：无
+
+## 角色索引表（唯一标识区）
+
+| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 最后出场位置 | 权重等级 |
+|--------|----------|----------|----------|----------|------------|----------|----------|
+"""
+                    save_string_to_txt(basic_structure, all_character_file)
+                    self.safe_log("已创建角色数据库.txt基本结构")
+                
+                # 更新角色数据库.txt文件中的表格
+                if os.path.exists(all_character_file) and updated_chars:
+                    character_db_content = read_file(all_character_file)
+                    
+                    # 定义表头和分隔符
+                    table_header = "| ID编号 | 正式名称 | 其他称谓集合 | 势力归属 | 当前状态 | 最后出场章 | 最后出场位置 | 权重等级 |"
+                    table_separator = "|--------|----------|----------|----------|----------|------------|----------|----------|"
+                    
+                    # 如果表格不存在，则在角色索引表后创建表格
+                    if table_header not in character_db_content:
+                        index_section = "## 角色索引表（唯一标识区）"
+                        if index_section in character_db_content:
+                            # 找到下一个章节的位置
+                            index_section_start = character_db_content.find(index_section)
+                            next_section_start = character_db_content.find("##", index_section_start + len(index_section))
+                            
+                            if (next_section_start == -1):
+                                next_section_start = len(character_db_content)
+                            
+                            # 在角色索引表和下一个章节之间插入表格
+                            table_content = f"\n\n{table_header}\n{table_separator}"
+                            character_db_content = character_db_content[:next_section_start] + table_content + character_db_content[next_section_start:]
+                    
+                    # 现在更新表格内容
+                    table_start = character_db_content.find(table_header)
+                    if (table_start != -1):
+                        table_end = character_db_content.find("##", table_start)
+                        if table_end == -1:
+                            table_end = len(character_db_content)
+                        
+                        # 提取现有表格行
+                        table_section = character_db_content[table_start:table_end]
+                        table_lines = table_section.split('\n')
+                        
+                        # 创建新表格内容
+                        new_table = [table_lines[0], table_lines[1]]  # 保留表头和分隔行
+                        
+                        # 添加或更新角色行
+                        existing_ids = set()
+                        for i in range(2, len(table_lines)):
+                            line = table_lines[i].strip()
+                            if not line or line.startswith('##'):
+                                continue
+                            
+                            # 提取ID
+                            id_match = re.match(r'\|\s*(ID\d+)\s*\|', line)
+                            if id_match:
+                                char_id = id_match.group(1)
+                                existing_ids.add(char_id)
+                                
+                                # 如果这个角色在更新列表中，则更新行
+                                if char_id in updated_chars:
+                                    char_info = updated_chars[char_id]
+                                    new_line = f"| {char_id} | {char_info['name']} | {char_info['other_names']} | {char_info['faction']} | {char_info['status']} | {char_info['last_chapter']} | {char_info['last_location']} | {char_info['weight']} |"
+                                    new_table.append(new_line)
+                                else:
+                                    # 保留原行
+                                    new_table.append(line)
+                        
+                        # 添加新角色
+                        for char_id, char_info in updated_chars.items():
+                            if char_id not in existing_ids:
+                                new_line = f"| {char_id} | {char_info['name']} | {char_info['other_names']} | {char_info['faction']} | {char_info['status']} | {char_info['last_chapter']} | {char_info['last_location']} | {char_info['weight']} |"
+                                new_table.append(new_line)
+                        
+                        # 替换表格
+                        new_table_content = '\n'.join(new_table)
+                        character_db_content = character_db_content[:table_start] + new_table_content + character_db_content[table_end:]
+                        
+                        # 更新分类统计
+                        total_chars = len(updated_chars)
+                        weight_counts = {"96-100": 0, "81-95": 0, "61-80": 0, "41-60": 0, "21-40": 0, "1-20": 0}
+                        core_chars = 0
+                        factions = {}
+                        
+                        for char_info in updated_chars.values():
+                            try:
+                                weight = int(char_info.get("weight", 0))
+                                if 96 <= weight <= 100: weight_counts["96-100"] += 1
+                                elif 81 <= weight <= 95: weight_counts["81-95"] += 1; core_chars += 1
+                                elif 61 <= weight <= 80: weight_counts["61-80"] += 1
+                                elif 41 <= weight <= 60: weight_counts["41-60"] += 1
+                                elif 21 <= weight <= 40: weight_counts["21-40"] += 1
+                                elif 1 <= weight <= 20: weight_counts["1-20"] += 1
+                                
+                                # 更新势力信息
+                                faction = char_info['faction']
+                                if faction != "无归属" and faction.strip():
+                                    if faction in factions:
+                                        factions[faction] += 1
+                                    else:
+                                        factions[faction] = 1
+                            except ValueError:
+                                self.safe_log(f"警告: 角色 {char_info['name']} 的权重值 '{char_info.get('weight')}' 无法转换为整数")
+                        
+                        # 构建新的分类统计文本
+                        faction_str = "势力分类："
+                        if factions:
+                            faction_str += ", ".join([f"{faction}({count})" for faction, count in factions.items()])
+                        else:
+                            faction_str += "无"
+                            
+                        new_stats_text = f"""## 分类统计
+### 权重分布
+主角级（96-100）：{weight_counts['96-100']}
+关键角色（81-95）：{weight_counts['81-95']}
+核心配角（61-80）：{weight_counts['61-80']}
+次要配角（41-60）：{weight_counts['41-60']}
+单元角色（21-40）：{weight_counts['21-40']}
+背景角色（1-20）：{weight_counts['1-20']}
+### 角色信息
+角色总数：{total_chars}
+核心角色（权重≥81）：{core_chars}
+活跃角色（最近X章出场）：{total_chars}
+{faction_str}
+
+## 角色索引表（唯一标识区）"""
+                        
+                        # 更新分类统计部分
+                        stats_pattern = re.compile(r'## 分类统计.*?## 角色索引表（唯一标识区）', re.DOTALL)
+                        character_db_content = stats_pattern.sub(new_stats_text, character_db_content)
+                        
+                        save_string_to_txt(character_db_content, all_character_file)
+                        self.safe_log("✅ 成功修复角色数据库.txt")
+                    else:
+                        self.safe_log("❌ 未找到角色数据库.txt中的表格，修复失败")
+                else:
+                    self.safe_log("❌ 没有需要更新的角色信息或角色数据库.txt不存在")
+                    
+            except Exception as e:
+                self.safe_log(f"❌ 检索角色状态时出错: {str(e)}")
+                logging.error(traceback.format_exc())
+        except Exception as e:
+            self.handle_exception(f"修复角色数据库时出错: {str(e)}")
+            logging.error(traceback.format_exc())
+    
+    threading.Thread(target=task, daemon=True).start()
+            
 def do_consistency_check(self, *args, **kwargs):
     """
     Wrapper function for consistency checking
@@ -352,7 +647,7 @@ def generate_volume_ui(self):
                 )
                 
                 # 创建提示词编辑框
-                prompt_text = ctk.CTkTextbox(editor_dialog, wrap="word", font=("Microsoft YaHei", 12))
+                prompt_text = ctk.CTkTextbox(editor_dialog, wrap="word", font=("Microsoft YaHei", 14))
                 prompt_text.pack(fill="both", expand=True, padx=10, pady=10)
                 prompt_text.insert("0.0", prompt)
                 
@@ -371,17 +666,17 @@ def generate_volume_ui(self):
                     btn_frame,
                     text="确认生成",
                     command=handle_confirm_click,
-                    font=("Microsoft YaHei", 12)
+                    font=("Microsoft YaHei", 14)
                 ).pack(side="left", padx=10)
                 
                 ctk.CTkButton(
                     btn_frame,
                     text="取消",
                     command=editor_dialog.destroy,
-                    font=("Microsoft YaHei", 12)
+                    font=("Microsoft YaHei", 14)
                 ).pack(side="left", padx=10)
 
-                word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 12))
+                word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 14))
                 word_count_label.pack(side="right", padx=10)
 
                 def update_word_count(event=None):
@@ -470,7 +765,7 @@ def generate_volume_ui(self):
             info_label = ctk.CTkLabel(
                 dialog,
                 text=f"{info_text}",
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             )
             info_label.pack(pady=10)
             
@@ -482,44 +777,81 @@ def generate_volume_ui(self):
                 ctk.CTkLabel(
                     input_frame,
                     text="主要角色数量：",
-                    font=("Microsoft YaHei", 12)
+                    font=("Microsoft YaHei", 14)
                 ).pack(side="left", padx=5)
                 
                 ctk.CTkEntry(
                     input_frame,
                     textvariable=character_count_var,
                     width=50,
-                    font=("Microsoft YaHei", 12)
+                    font=("Microsoft YaHei", 14)
                 ).pack(side="left", padx=5)
 
-            btn_frame = ctk.CTkFrame(dialog)
-            btn_frame.pack(pady=5)
-
-            # 只有在生成第一卷时显示生成角色按钮
+            # 根据当前卷数创建不同的UI
             if (current_vol == 0):
+                # 第一卷时显示生成角色按钮
+                btn_frame = ctk.CTkFrame(dialog)
+                btn_frame.pack(pady=5)
+                
                 ctk.CTkButton(
                     btn_frame,
                     text=btn2_text,
                     command=handle_generate_characters_click,
-                    font=("Microsoft YaHei", 12),
+                    font=("Microsoft YaHei", 14),
                     width=200
                 ).pack(pady=5)
             else:
+                # 非第一卷时显示权重输入框
+                weight_frame = ctk.CTkFrame(dialog)
+                weight_frame.pack(pady=10)
+                
+                weight_label = ctk.CTkLabel(
+                    weight_frame,
+                    text="提取大于",
+                    font=("Microsoft YaHei", 14)
+                )
+                weight_label.pack(side="left", padx=5)
+                
+                weight_var = tk.StringVar(value="91")
+                weight_entry = ctk.CTkEntry(
+                    weight_frame,
+                    textvariable=weight_var,
+                    width=50,
+                    font=("Microsoft YaHei", 14)
+                )
+                weight_entry.pack(side="left", padx=5)
+                
+                weight_label2 = ctk.CTkLabel(
+                    weight_frame,
+                    text="权重的角色状态至提示词",
+                    font=("Microsoft YaHei", 14)
+                )
+                weight_label2.pack(side="left", padx=5)
                 # 非第一卷时的生成按钮
                 def open_subsequent_volume_prompt():
-                    dialog.destroy() # 关闭当前的确认窗口
-                    show_subsequent_volume_prompt(current_vol + 1)
-
+                    try:
+                        # 验证权重值
+                        weight_value = int(weight_var.get())
+                        if weight_value < 0 or weight_value > 100:
+                            messagebox.showwarning("警告", "权重值应在0-100之间")
+                            return
+                            
+                        dialog.destroy() # 关闭当前的确认窗口
+                        show_subsequent_volume_prompt(current_vol + 1, weight_value)
+                    except ValueError:
+                        messagebox.showerror("错误", "请输入有效的权重数值")
+                
+                # 将生成按钮放到weight_frame下面
                 ctk.CTkButton(
-                    btn_frame,
-                    text=f"生成第{current_vol + 1}卷大纲",
-                    command=open_subsequent_volume_prompt,
-                    font=("Microsoft YaHei", 12),
+                    dialog,
+                    text=f"生成第{current_vol + 1}卷大纲", 
+                    command=open_subsequent_volume_prompt,                 
+                    font=("Microsoft YaHei", 14),
                     width=200
                 ).pack(pady=5)
-                
+
                 # 显示后续卷提示词编辑器
-                def show_subsequent_volume_prompt(vol_num):
+                def show_subsequent_volume_prompt(vol_num, weight_value):
                     editor_dialog = ctk.CTkToplevel(self.master)
                     editor_dialog.title(f"编辑第{vol_num}卷大纲生成提示词")
                     editor_dialog.geometry("800x600")
@@ -556,119 +888,41 @@ def generate_volume_ui(self):
                         if volume_content.strip():
                             from novel_generator.volume import extract_volume_outline
                             previous_volume_outline = extract_volume_outline(volume_content, vol_num - 1)
+ 
+                    # 创建LLM适配器
+                    interface_format = self.interface_format_var.get().strip()
+                    api_key = self.api_key_var.get().strip()
+                    base_url = self.base_url_var.get().strip()
+                    model_name = self.model_name_var.get().strip()
+                    temperature = self.temperature_var.get()
+                    max_tokens = self.max_tokens_var.get()
+                    timeout_val = self.safe_get_int(self.timeout_var, 600)
                     
-                    # 创建一个新的对话框，让用户输入权重值并显示当前进度
-                    weight_dialog = ctk.CTkToplevel(self.master)
-                    weight_dialog.title(f"设置角色权重")
-                    weight_dialog.geometry("400x200")
-                    weight_dialog.transient(editor_dialog)
-                    weight_dialog.grab_set()
-                    
-                    # 显示当前进度
-                    progress_label = ctk.CTkLabel(
-                        weight_dialog,
-                        text=f"当前进度：已生成 {current_vol}/{total_vols} 卷",
-                        font=("Microsoft YaHei", 12)
+                    llm_adapter = create_llm_adapter(
+                        interface_format=interface_format,
+                        base_url=base_url,
+                        model_name=model_name,
+                        api_key=api_key,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        timeout=timeout_val
                     )
-                    progress_label.pack(pady=(20, 5))
                     
-                    # 创建权重输入框
-                    weight_frame = ctk.CTkFrame(weight_dialog)
-                    weight_frame.pack(pady=10)
+                    # 使用传入的权重值获取角色
+                    from novel_generator.volume import get_high_weight_characters
+                    setting_characters = ""
+                    try:
+                        self.safe_log(f"正在检索权重大于{weight_value}的角色...")
+                        setting_characters = get_high_weight_characters(filepath, llm_adapter, weight_value)
+                    except Exception as e:
+                        self.safe_log(f"获取高权重角色时出错: {str(e)}")
                     
-                    weight_label = ctk.CTkLabel(
-                        weight_frame,
-                        text="检索向量库内大于",
-                        font=("Microsoft YaHei", 12)
-                    )
-                    weight_label.pack(side="left", padx=5)
-                    
-                    weight_var = tk.StringVar(value="91")
-                    weight_entry = ctk.CTkEntry(
-                        weight_frame,
-                        textvariable=weight_var,
-                        width=50,
-                        font=("Microsoft YaHei", 12)
-                    )
-                    weight_entry.pack(side="left", padx=5)
-                    
-                    weight_label2 = ctk.CTkLabel(
-                        weight_frame,
-                        text="权重的角色",
-                        font=("Microsoft YaHei", 12)
-                    )
-                    weight_label2.pack(side="left", padx=5)
-                    
-                    # 按钮区域
-                    btn_frame = ctk.CTkFrame(weight_dialog)
-                    btn_frame.pack(pady=20)
-                    
-                    def handle_generate_click():
-                        try:
-                            weight_value = int(weight_var.get())
-                            if weight_value < 0 or weight_value > 100:
-                                messagebox.showwarning("警告", "权重值应在0-100之间")
-                                return
-                                
-                            weight_dialog.destroy()
-                            
-                            # 创建LLM适配器
-                            interface_format = self.interface_format_var.get().strip()
-                            api_key = self.api_key_var.get().strip()
-                            base_url = self.base_url_var.get().strip()
-                            model_name = self.model_name_var.get().strip()
-                            temperature = self.temperature_var.get()
-                            max_tokens = self.max_tokens_var.get()
-                            timeout_val = self.safe_get_int(self.timeout_var, 600)
-                            
-                            llm_adapter = create_llm_adapter(
-                                interface_format=interface_format,
-                                base_url=base_url,
-                                model_name=model_name,
-                                api_key=api_key,
-                                temperature=temperature,
-                                max_tokens=max_tokens,
-                                timeout=timeout_val
-                            )
-                            
-                            # 修改get_high_weight_characters函数调用，传入用户指定的权重值
-                            from novel_generator.volume import get_high_weight_characters
-                            setting_characters = ""
-                            try:
-                                # 使用自定义权重值获取角色
-                                self.safe_log(f"正在检索权重大于{weight_value}的角色...")
-                                setting_characters = get_high_weight_characters(filepath, llm_adapter, weight_value)
-                            except Exception as e:
-                                self.safe_log(f"获取高权重角色时出错: {str(e)}")
-                            
-                            # 计算章节分布
-                            chapters_per_volume = number_of_chapters // volume_count
-                            remaining_chapters = number_of_chapters % volume_count
-                            extra_chapter = 1 if vol_num <= remaining_chapters else 0
-                            start_chap = 1 + (vol_num - 1) * chapters_per_volume + min(vol_num - 1, remaining_chapters)
-                            end_chap = start_chap + chapters_per_volume + extra_chapter - 1
-                            
-                            # 继续处理提示词和显示编辑器
-                            continue_with_prompt_editor(setting_characters, start_chap, end_chap)
-                            
-                        except ValueError:
-                            messagebox.showerror("错误", "请输入有效的权重数值")
-                    
-                    ctk.CTkButton(
-                        btn_frame,
-                        text=f"生成第{vol_num}卷大纲",
-                        command=handle_generate_click,
-                        font=("Microsoft YaHei", 12),
-                        width=150
-                    ).pack(side="left", padx=10)
-                    
-                    ctk.CTkButton(
-                        btn_frame,
-                        text="退出",
-                        command=weight_dialog.destroy,
-                        font=("Microsoft YaHei", 12),
-                        width=100
-                    ).pack(side="left", padx=10)
+                    # 计算章节分布
+                    chapters_per_volume = number_of_chapters // volume_count
+                    remaining_chapters = number_of_chapters % volume_count
+                    extra_chapter = 1 if vol_num <= remaining_chapters else 0
+                    start_chap = 1 + (vol_num - 1) * chapters_per_volume + min(vol_num - 1, remaining_chapters)
+                    end_chap = start_chap + chapters_per_volume + extra_chapter - 1
                     
                     # 定义继续处理提示词和显示编辑器的函数
                     def continue_with_prompt_editor(setting_characters, start_chap, end_chap):
@@ -751,7 +1005,7 @@ def generate_volume_ui(self):
                             )
                         
                         # 创建提示词编辑框
-                        prompt_text = ctk.CTkTextbox(editor_dialog, wrap="word", font=("Microsoft YaHei", 12))
+                        prompt_text = ctk.CTkTextbox(editor_dialog, wrap="word", font=("Microsoft YaHei", 14))
                         prompt_text.pack(fill="both", expand=True, padx=10, pady=10)
                         prompt_text.insert("0.0", prompt)
                         
@@ -770,17 +1024,17 @@ def generate_volume_ui(self):
                             btn_frame,
                             text="确认生成",
                             command=handle_confirm_click,
-                            font=("Microsoft YaHei", 12)
+                            font=("Microsoft YaHei", 14)
                         ).pack(side="left", padx=10)
                         
                         ctk.CTkButton(
                             btn_frame,
                             text="取消",
                             command=editor_dialog.destroy,
-                            font=("Microsoft YaHei", 12)
+                            font=("Microsoft YaHei", 14)
                         ).pack(side="left", padx=10)
 
-                        word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 12))
+                        word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 14))
                         word_count_label.pack(side="right", padx=10)
 
                         def update_word_count(event=None):
@@ -790,6 +1044,9 @@ def generate_volume_ui(self):
 
                         prompt_text.bind("<KeyRelease>", update_word_count)
                         update_word_count() # Initial count
+                    
+                    # 调用函数显示提示词编辑器
+                    continue_with_prompt_editor(setting_characters, start_chap, end_chap)
 
             # 退出按钮放在底部
             exit_frame = ctk.CTkFrame(dialog)
@@ -798,7 +1055,7 @@ def generate_volume_ui(self):
                 exit_frame,
                 text="退出",
                 command=dialog.destroy,
-                font=("Microsoft YaHei", 12),
+                font=("Microsoft YaHei", 14),
                 width=100
             ).pack()
 
@@ -972,26 +1229,16 @@ def rewrite_chapter_ui(self):
     # 获取用户指导
     user_guidance = self.user_guide_text.get("0.0", "end").strip()
     
-    # 获取小说类型
-    genre = "奇幻" # 默认值
-    genre_pattern = re.compile(r'类型：\s*([^\n]+)', re.MULTILINE)
-    genre_match = genre_pattern.search(novel_setting)
-    if genre_match:
-        genre = genre_match.group(1).strip()
-    
+    # 获取小说类型章节字数
+    word_number = self.safe_get_int(self.word_number_var, 3000)
+    genre = self.genre_var.get().strip()
+
     # 获取小说主题
     topic = "" # 默认值
     topic_pattern = re.compile(r'主题：\s*([^\n]+)', re.MULTILINE)
     topic_match = topic_pattern.search(novel_setting)
     if topic_match:
         topic = topic_match.group(1).strip()
-    
-    # 获取章节字数
-    word_number = 3000 # 默认值
-    word_number_pattern = re.compile(r'每章(\d+)字', re.MULTILINE)
-    word_number_match = word_number_pattern.search(novel_setting)
-    if word_number_match:
-        word_number = int(word_number_match.group(1))
     
     # 读取一致性审校文件内容
     consistency_review = ""
@@ -1030,7 +1277,7 @@ def rewrite_chapter_ui(self):
 def show_rewrite_prompt_editor(self, prompt_text, chapter_num, filepath, chapter_file_path):
     """显示章节改写提示词编辑器"""
     dialog = ctk.CTkToplevel(self.master)
-    dialog.title("编辑改写提示词")
+    dialog.title("改写章节提示词")
     dialog.geometry("800x600")
     dialog.transient(self.master)  # 使弹窗相对于主窗口
     dialog.grab_set()  # 使弹窗成为模态窗口，阻止与主窗口交互
@@ -1063,7 +1310,7 @@ def show_rewrite_prompt_editor(self, prompt_text, chapter_num, filepath, chapter
     ctk.CTkButton(btn_frame, text="确认改写", command=on_confirm).pack(side="left", padx=5)
     ctk.CTkButton(btn_frame, text="取消", command=on_cancel).pack(side="left", padx=5)
 
-    word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 12))
+    word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 14))
     word_count_label.pack(side="right", padx=10)
 
     def update_word_count(event=None):
@@ -1160,7 +1407,7 @@ def show_plot_arcs_ui(self):
             dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
             
             # 添加剧情要点展示组件
-            text_box = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 12))
+            text_box = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 14))
             text_box.pack(fill="both", expand=True, padx=10, pady=10)
             
             # 读取并显示剧情要点文件
@@ -1187,11 +1434,11 @@ def show_plot_arcs_ui(self):
                     self.safe_log(f"❌ 保存剧情要点失败: {str(e_save)}")
                     messagebox.showerror("错误", f"保存失败: {str(e_save)}", parent=dialog)
             
-            save_button = ctk.CTkButton(button_frame, text="保存", command=save_content, font=("Microsoft YaHei", 12))
+            save_button = ctk.CTkButton(button_frame, text="保存", command=save_content, font=("Microsoft YaHei", 14))
             save_button.pack(side="left", padx=10)
 
             # 退出按钮
-            exit_button = ctk.CTkButton(button_frame, text="退出", command=dialog.destroy, font=("Microsoft YaHei", 12))
+            exit_button = ctk.CTkButton(button_frame, text="退出", command=dialog.destroy, font=("Microsoft YaHei", 14))
             exit_button.pack(side="left", padx=10)
                 
         except Exception as e:
@@ -1222,7 +1469,7 @@ def show_consistency_check_results_ui(self):
             dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
             
             # 添加文本展示组件
-            text_box = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 12))
+            text_box = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 14))
             text_box.pack(fill="both", expand=True, padx=10, pady=10)
             
             # 读取并显示一致性审校文件
@@ -1249,11 +1496,11 @@ def show_consistency_check_results_ui(self):
                     self.safe_log(f"❌ 保存一致性审校结果失败: {str(e_save)}")
                     messagebox.showerror("错误", f"保存失败: {str(e_save)}", parent=dialog)
             
-            save_button = ctk.CTkButton(button_frame, text="保存", command=save_content, font=("Microsoft YaHei", 12))
+            save_button = ctk.CTkButton(button_frame, text="保存", command=save_content, font=("Microsoft YaHei", 14))
             save_button.pack(side="left", padx=10)
 
             # 退出按钮
-            exit_button = ctk.CTkButton(button_frame, text="退出", command=dialog.destroy, font=("Microsoft YaHei", 12))
+            exit_button = ctk.CTkButton(button_frame, text="退出", command=dialog.destroy, font=("Microsoft YaHei", 14))
             exit_button.pack(side="left", padx=10)
                 
         except Exception as e:
@@ -1450,22 +1697,7 @@ def finalize_chapter_ui(self):
                     new_character_state = old_character_state
 
                 # --- 步骤 4: 向量化伏笔内容 --- 
-                self.safe_log("  [3/4] 正在处理和向量化伏笔内容...")
-                # 输出伏笔信息到终端
-                logging.info(f"本章伏笔信息: {foreshadowing_str}")
-                # 检查向量库是否存在，如果不存在则初始化
-                if embedding_adapter and not vectorstore:
-                    from novel_generator.vectorstore_utils import init_vector_store
-                    logging.info("向量库不存在，尝试初始化新的向量库...")
-                    # 不使用章节文本初始化向量库，让process_and_vectorize_foreshadowing函数处理
-                    # 检查向量库是否存在
-                    from novel_generator.vectorstore_utils import load_vector_store
-                    vectorstore = load_vector_store(embedding_adapter, filepath, collection_name="foreshadowing_collection")
-                    if not vectorstore:
-                        logging.info("伏笔向量库不存在，将在处理伏笔时自动创建")
-                    else:
-                        logging.info("成功加载现有伏笔向量库")
-                
+                self.safe_log("  [3/4] 正在处理和向量化伏笔内容...")               
                 if foreshadowing_str:  # 只要有伏笔信息就处理，不管向量库是否存在
                     try:
                         logging.info("开始调用伏笔内容处理和向量化函数...")
@@ -1535,13 +1767,16 @@ def finalize_chapter_ui(self):
                     if os.path.exists(directory_file):
                         directory_content = read_file(directory_file)
                         if directory_content:
-                            next_chapter_pattern = rf"第{chap_num + 1}章.*?(?=第{chap_num + 2}章|$)"
-                            next_chapter_match = re.search(next_chapter_pattern, directory_content, re.DOTALL)
-                            if next_chapter_match:
-                                next_chapter_outline = next_chapter_match.group(0).strip()
-                                self.safe_log(f"已找到下一章大纲: {next_chapter_outline[:100]}...")
-                            else:
-                                self.safe_log(f"未找到第{chap_num + 1}章大纲内容")
+                            # 修改正则表达式，更精确地匹配章节标题和内容
+                            next_chapter_pattern = (
+                                rf"^第{chap_num + 1}[.．]?章[^├└]*"  # 匹配章节标题行，包括可能的小数点
+                                rf"(?:├.*?\n|└.*?\n)*"              # 匹配所有├和└开头的行
+                                rf"(?=第{chap_num + 2}[.．]?章|$)"   # 向前查看，直到下一章或文件结尾
+                            )
+                            # 增加调试日志
+                            if not next_chapter_outline:
+                                logging.debug(f"搜索模式: {next_chapter_pattern}")
+                                logging.debug(f"目录内容片段: {directory_content[:500]}")
                 except Exception as e:
                     self.safe_log(f"获取下一章大纲时出错: {str(e)}")
                     next_chapter_outline = ""
@@ -1880,7 +2115,7 @@ def generate_chapter_blueprint_ui(self):
             # 章节数量输入
             entry_frame = ctk.CTkFrame(dialog)
             entry_frame.pack(pady=(20, 0))
-            ctk.CTkLabel(entry_frame, text="准备生成章节数量：", font=("Microsoft YaHei", 12)).pack(side="left")
+            ctk.CTkLabel(entry_frame, text="准备生成章节数量：", font=("Microsoft YaHei", 14)).pack(side="left")
             chapter_count_var = ctk.StringVar(value="20")  # UI输入框的默认值
             chapter_count_entry = ctk.CTkEntry(entry_frame, textvariable=chapter_count_var, width=60)
             chapter_count_entry.pack(side="left", padx=(0, 10))
@@ -1890,7 +2125,7 @@ def generate_chapter_blueprint_ui(self):
                 progress_text = "当前尚未生成任何章节。"
             else:
                 progress_text = f"当前已生成至第{last_chapter}章。"
-            ctk.CTkLabel(dialog, text=progress_text, font=("Microsoft YaHei", 12), text_color="#888888").pack(pady=(5, 0))
+            ctk.CTkLabel(dialog, text=progress_text, font=("Microsoft YaHei", 14), text_color="#888888").pack(pady=(5, 0))
 
             # 状态判断
             if last_chapter == 0 or (is_complete and is_last):
@@ -1914,7 +2149,7 @@ def generate_chapter_blueprint_ui(self):
                 btn2_vol = current_vol + 1
                 btn2_mode = "volume"
 
-            ctk.CTkLabel(dialog, text=info_text, font=("Microsoft YaHei", 12)).pack(pady=(10, 0))
+            ctk.CTkLabel(dialog, text=info_text, font=("Microsoft YaHei", 14)).pack(pady=(10, 0))
             
             # 添加角色状态提取相关UI
             char_frame = ctk.CTkFrame(dialog)
@@ -1923,7 +2158,7 @@ def generate_chapter_blueprint_ui(self):
             ctk.CTkLabel(
                 char_frame,
                 text="提取前",
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             ).pack(side="left", padx=5)
             
             # 默认提取前10章
@@ -1932,14 +2167,14 @@ def generate_chapter_blueprint_ui(self):
                 char_frame,
                 textvariable=chapter_extract_var,
                 width=40,
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             )
             chapter_extract_entry.pack(side="left", padx=5)
             
             ctk.CTkLabel(
                 char_frame,
                 text="章有出场，且权重大于",
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             ).pack(side="left", padx=5)
             
             # 默认权重为80
@@ -1948,14 +2183,14 @@ def generate_chapter_blueprint_ui(self):
                 char_frame,
                 textvariable=weight_var,
                 width=40,
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             )
             weight_entry.pack(side="left", padx=5)
             
             ctk.CTkLabel(
                 char_frame,
                 text="的角色状态",
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             ).pack(side="left", padx=5)
 
             btn_frame = ctk.CTkFrame(dialog)
@@ -2239,14 +2474,14 @@ def generate_chapter_blueprint_ui(self):
                 btn_frame,
                 text=btn1_text,
                 command=handle_increment,
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             ).pack(side="left", padx=10)
 
             ctk.CTkButton(
                 btn_frame,
                 text="退出",
                 command=lambda: dialog.destroy(),
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             ).pack(side="left", padx=10)
 
             # 推荐提示
@@ -2339,7 +2574,7 @@ def generate_chapter_draft_ui(self):
     # 创建提示词编辑对话框
     def show_prompt_editor(prompt_text):
         dialog = ctk.CTkToplevel(self.master)
-        dialog.title("编辑章节提示词")
+        dialog.title("生成草稿提示词")
         dialog.geometry("800x600")
         dialog.transient(self.master)  # 使弹窗相对于主窗口
         dialog.grab_set()  # 使弹窗成为模态窗口，阻止与主窗口交互
@@ -2372,7 +2607,7 @@ def generate_chapter_draft_ui(self):
         ctk.CTkButton(btn_frame, text="确认生成", command=on_confirm).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="取消", command=on_cancel).pack(side="left", padx=5)
 
-        word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 12))
+        word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 14))
         word_count_label.pack(side="right", padx=10)
 
         def update_word_count(event=None):
@@ -2507,13 +2742,21 @@ def generate_chapter_draft_ui(self):
             # 获取伏笔编号并从向量库检索伏笔历史记录
             foreshadowing_ids = []
             if chapter_info and 'foreshadowing' in chapter_info and chapter_info['foreshadowing']:
-                # 从伏笔字符串中提取伏笔ID
-                pattern = r'[A-Z]F\d+'
-                foreshadowing_ids = re.findall(pattern, chapter_info['foreshadowing'])
-                # 对伏笔编号进行去重
+                # 从伏笔字符串中严格提取伏笔ID
+                entries_pattern = r'^\s*[│├└]*\s*([A-Z]F\d{3})\(([^)]+)\)-([^-]+)-([^-]+)-'
+                entries_matches = re.finditer(entries_pattern, chapter_info['foreshadowing'], re.M)
+                
+                for match in entries_matches:
+                    fb_id = match.group(1)
+                    operation = match.group(4).strip()
+                    # 只收集需要回收、强化、触发、悬置的伏笔ID
+                    if operation in ["回收", "强化", "触发", "悬置"]:
+                        foreshadowing_ids.append(fb_id)
+                        
                 if foreshadowing_ids:
-                    foreshadowing_ids = list(set(foreshadowing_ids))
-                self.safe_log(f"从章节信息中提取到伏笔编号 (去重后): {foreshadowing_ids}")
+                    self.safe_log(f"从章节信息中提取到需要检索历史的伏笔ID: {foreshadowing_ids}")
+                else:
+                    self.safe_log("本章无需要检索历史的伏笔ID")
 
             # 从向量库检索伏笔历史记录
             knowledge_context = ""

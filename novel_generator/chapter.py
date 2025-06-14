@@ -150,7 +150,7 @@ def generate_chapter_draft(
         prev_chapter_content = ""
         if novel_number > 1:
             prev_chapter_file = os.path.join(filepath, "chapters", f"chapter_{novel_number-1}.txt")
-            if os.path.exists(prev_chapter_file):
+            if (os.path.exists(prev_chapter_file)):
                 prev_chapter_content = read_file(prev_chapter_file)
         
         # 获取章节目录
@@ -200,8 +200,8 @@ def generate_chapter_draft(
         # 8.1.2 提取完整的伏笔条目
         foreshadowing_entries = []
         if chapter_foreshadowing:
-            # 使用正则表达式提取伏笔条目
-            entries_pattern = r"^[│├└]*([A-Z]{2}\d{3})\(([^\)]+)\)-([^-]+)-([^-]+)-([^（]+)（([^）]+)）"
+            # 修改正则表达式，严格匹配行首的伏笔条目格式
+            entries_pattern = r'^\s*[│├└]*\s*([A-Z]F\d{3})\(([^)]+)\)-([^-]+)-([^-]+)-([^（]+)（([^）]+)）'
             entries_matches = re.findall(entries_pattern, chapter_foreshadowing, re.M)
             
             for match in entries_matches:
@@ -209,23 +209,28 @@ def generate_chapter_draft(
                     entry = {
                         "id": match[0],
                         "type": match[1],
-                        "status": match[2],
-                        "title": match[3],
+                        "operation": match[3],  # 记录伏笔操作(埋设/回收/强化)
+                        "title": match[2],
                         "content": match[4],
                         "note": match[5]
                     }
                     foreshadowing_entries.append(entry)
-            
-            logging.info(f"8.1.2 提取到的完整伏笔条目: {foreshadowing_entries}")
-        
-        # 8.1.3 从伏笔条目中提取伏笔ID
-        foreshadowing_ids = [entry["id"] for entry in foreshadowing_entries] if foreshadowing_entries else []
-        if not foreshadowing_ids and chapter_foreshadowing:
-            # 如果结构化提取失败，使用简单正则表达式提取ID
-            foreshadowing_ids = re.findall(r"([A-Z]{2}\d{3})\(", chapter_foreshadowing)
-            logging.warning(f"8.1.3 结构化提取伏笔条目失败，使用简单正则表达式提取ID: {foreshadowing_ids}")
-        
-        logging.info(f"8.1.3 分析出当前章节的伏笔编号: {foreshadowing_ids}")
+                    logging.info(f"8.1.2 提取到伏笔条目: ID={entry['id']}, 操作={entry['operation']}, 标题={entry['title']}")
+
+        # 8.1.3 从伏笔条目中提取需要检索历史的伏笔ID
+        foreshadowing_ids = []
+        if foreshadowing_entries:
+            # 只收集需要回收、强化、触发、悬置的伏笔ID
+            needed_operations = ["回收", "强化", "触发", "悬置"]
+            foreshadowing_ids = [
+                entry["id"] 
+                for entry in foreshadowing_entries 
+                if entry["operation"] in needed_operations
+            ]
+            logging.info(f"8.1.3 本章需要检索历史的伏笔ID: {foreshadowing_ids}")
+        else:
+            logging.warning("8.1.3 未找到需要检索历史的伏笔ID")
+
         character_names = [name.strip() for name in characters_involved.split('、') if name.strip()] # 假设以中文顿号分隔
         logging.info(f"分析出当前章节的角色: {character_names}")
 
@@ -291,7 +296,7 @@ def generate_chapter_draft(
                 # 使用专门的伏笔向量库（foreshadowing_collection）
                 try:
                     vectorstore = load_vector_store(embedding_adapter, filepath, collection_name="foreshadowing_collection")
-                    if vectorstore:
+                    if (vectorstore):
                         logging.info("8.1.5.4 成功加载伏笔向量库，准备检索伏笔历史记录")
                     else:
                         logging.warning("8.1.5.5 加载伏笔向量库失败，无法检索伏笔历史记录")
@@ -683,107 +688,6 @@ def process_chapter_content(
         error_msg = f"处理章节内容时出错: {str(e)}\n{traceback.format_exc()}"
         logging.error(error_msg)
 
-def rewrite_chapter(
-    interface_format: str,
-    api_key: str,
-    base_url: str,
-    llm_model: str,
-    filepath: str,
-    novel_number: int,
-    chapter_content: str,
-    rewrite_instruction: str,
-    temperature: float = 0.7,
-    max_tokens: int = 4096,
-    timeout: int = 600
-) -> str:
-    """
-    重写章节内容
-    
-    Args:
-        interface_format: LLM接口格式
-        api_key: API密钥
-        base_url: API基础URL
-        llm_model: 语言模型名称
-        filepath: 文件保存路径
-        novel_number: 章节编号
-        chapter_content: 当前章节内容或完整提示词
-        rewrite_instruction: 重写指令
-        temperature: 温度参数
-        max_tokens: 最大令牌数
-        timeout: 超时时间
-        
-    Returns:
-        重写后的章节内容
-    """
-    from prompt_definitions import chapter_rewrite_prompt
-    from llm_adapters import create_llm_adapter
-    
-    try:
-        # 创建LLM适配器
-        llm_adapter = create_llm_adapter(
-            interface_format=interface_format,
-            base_url=base_url,
-            model_name=llm_model,
-            api_key=api_key,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            timeout=timeout
-        )
-        
-        # 判断传入的是完整提示词还是仅章节内容
-        prompt = ""
-        if "【本章信息】" in chapter_content and "【原始草稿】" in chapter_content:
-            # 如果是完整提示词，直接使用
-            prompt = chapter_content
-        else:
-            # 否则构建提示词
-            # 获取章节信息
-            directory_file = os.path.join(filepath, "章节目录.txt")
-            directory_content = read_file(directory_file)
-            
-            chapter_info = {}
-            chapter_pattern = re.compile(r'第\s*(\d+)\s*章.*?└─本章简述：\s*(.+?)$', re.MULTILINE | re.DOTALL)
-            for match in chapter_pattern.finditer(directory_content):
-                if int(match.group(1)) == novel_number:
-                    chapter_info["chapter_summary"] = match.group(2).strip()
-                    break
-            
-            # 读取一致性审校文件内容
-            consistency_review = ""
-            consistency_review_file = os.path.join(filepath, "一致性审校.txt")
-            if os.path.exists(consistency_review_file):
-                try:
-                    consistency_review = read_file(consistency_review_file)
-                except Exception as e:
-                    logging.error(f"读取一致性审校文件时出错: {str(e)}")
-            
-            # 构建提示词
-            prompt = chapter_rewrite_prompt.format(
-                chapter_content=chapter_content,
-                rewrite_instruction=rewrite_instruction,
-                chapter_summary=chapter_info.get("chapter_summary", ""),
-                novel_number=novel_number,
-                一致性审校=consistency_review
-            )
-        
-        # 重写章节内容
-        rewritten_chapter = invoke_with_cleaning(llm_adapter, prompt)
-        
-        # 保存重写后的章节内容
-        os.makedirs(os.path.join(filepath, "chapters"), exist_ok=True)
-        chapter_file = os.path.join(filepath, "chapters", f"chapter_{novel_number}.txt")
-        clear_file_content(chapter_file)
-        save_string_to_txt(rewritten_chapter, chapter_file)
-        
-        logging.info(f"成功重写第{novel_number}章内容")
-        return rewritten_chapter
-        
-    except Exception as e:
-        error_msg = f"重写章节内容时出错: {str(e)}\n{traceback.format_exc()}"
-        logging.error(error_msg)
-        return f"重写章节内容失败: {str(e)}"
-
-
 def build_chapter_prompt(
     novel_setting: str,
     character_state: str,
@@ -913,8 +817,30 @@ def build_chapter_prompt(chapter_info: dict, filepath: str) -> str:
         plot_points_file = os.path.join(filepath, "剧情要点.txt")
         plot_points = ""
         if os.path.exists(plot_points_file):
-            with open(plot_points_file, "r", encoding="utf-8") as f:
-                plot_points = f.read().strip()
+            current_chapter = chapter_info.get('novel_number', 1)
+            if current_chapter > 1:
+                previous_chapter = current_chapter - 1
+                with open(plot_points_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    
+                    # 使用多个模式匹配前一章的剧情要点
+                    title_patterns = [
+                        rf"(第{previous_chapter}章.*?剧情要点：[\s\S]*?)(?=第{current_chapter}章|$)",  
+                        rf"(第{previous_chapter}章.*?剧情要点[：:][\s\S]*?)(?=第{current_chapter}章|$)",  
+                        rf"(第{previous_chapter}章[\s\S]*?)(?=第{current_chapter}章|$)"  
+                    ]
+                    
+                    # 先尝试包含标题的匹配
+                    for pattern in title_patterns:
+                        match = re.search(pattern, content)
+                        if match and match.group(1).strip():
+                            plot_points = match.group(1).strip()
+                            logging.info(f"成功提取第{previous_chapter}章的剧情要点")
+                            break
+                    
+                    # 如果上述模式都没匹配到，记录警告
+                    if not plot_points:
+                        logging.warning(f"未找到第{previous_chapter}章的剧情要点")
                 
         # 从 chapter_info 中提取所需参数
         return chapter_draft_prompt.format(

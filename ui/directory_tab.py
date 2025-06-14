@@ -21,7 +21,7 @@ def build_directory_tab(self):
         button_frame,
         text="加载 章节目录.txt",
         command=self.load_chapter_blueprint,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     load_btn.pack(side="left", padx=5, pady=5)
 
@@ -30,7 +30,7 @@ def build_directory_tab(self):
         button_frame,
         text="加载 伏笔状态.txt",
         command=lambda: self.load_text_file("伏笔状态.txt"),  # 调用 load_text_file
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     load_foreshadow_btn.pack(side="left", padx=5, pady=5)
 
@@ -38,7 +38,7 @@ def build_directory_tab(self):
     self.directory_word_count_label = ctk.CTkLabel(
         button_frame,
         text="字数：0",
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     self.directory_word_count_label.pack(side="left", padx=5, pady=5)
 
@@ -47,12 +47,12 @@ def build_directory_tab(self):
         button_frame, 
         text="保存修改", 
         command=self.save_chapter_blueprint,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     save_btn.pack(side="right", padx=5, pady=5)
 
     # 文本框
-    self.directory_text = ctk.CTkTextbox(self.directory_tab, wrap="word", font=("Microsoft YaHei", 12))
+    self.directory_text = ctk.CTkTextbox(self.directory_tab, wrap="word", font=("Microsoft YaHei", 14))
     
     def update_word_count(event=None):
         text = self.directory_text.get("0.0", "end")

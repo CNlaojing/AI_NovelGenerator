@@ -24,7 +24,7 @@ def build_volume_tab(self):
         top_frame, 
         text="加载 分卷大纲.txt", 
         command=self.load_volume,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     load_btn.grid(row=0, column=0, padx=5, pady=5)
 
@@ -32,14 +32,14 @@ def build_volume_tab(self):
         top_frame,
         text="保存修改",
         command=self.save_volume,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     save_btn.grid(row=0, column=1, padx=5, pady=5)
 
     self.volume_word_count = ctk.CTkLabel(
         top_frame,
         text="字数：0",
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     self.volume_word_count.grid(row=0, column=4, padx=(0,10), sticky="e")
 

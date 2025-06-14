@@ -130,17 +130,31 @@ def process_and_vectorize_foreshadowing(chapter_text, chapter_info, filepath, em
         
         # 解析伏笔编号
         foreshadowing_ids = []
-        for line in foreshadowing_items.split('\n'):
-            # 使用正则表达式提取伏笔编号 (如MF001, SF001, YF001等)
-            ids = re.findall(r'([A-Z]F\d{3})', line)
-            foreshadowing_ids.extend(ids)
-        
-        if not foreshadowing_ids:
-            logging.info(f"第{chapter_number}章未找到有效的伏笔编号，跳过处理")
-            return {"status": "no_valid_ids"}
-        
-        logging.info(f"提取到的伏笔编号: {', '.join(foreshadowing_ids)}")
-        
+        if chapter_info and 'foreshadowing' in chapter_info and chapter_info['foreshadowing']:
+            # 简化正则表达式，专注于提取伏笔ID
+            entries_pattern = r'([A-Z]F\d{3})\('  # 改为只匹配伏笔ID格式
+            foreshadowing_str = chapter_info['foreshadowing']
+            # 确保输入是字符串
+            if isinstance(foreshadowing_str, (list, tuple)):
+                foreshadowing_str = '\n'.join(map(str, foreshadowing_str))
+                
+            entries_matches = re.finditer(entries_pattern, foreshadowing_str)
+            
+            # 记录找到的所有伏笔ID
+            found_ids = set()
+            for match in entries_matches:
+                fb_id = match.group(1)
+                if fb_id not in found_ids:
+                    found_ids.add(fb_id)
+                    foreshadowing_ids.append(fb_id)
+                    logging.info(f"提取到伏笔编号: {fb_id}")
+            
+            if not foreshadowing_ids:
+                logging.info(f"第{chapter_info.get('novel_number', '未知')}章未找到有效的伏笔编号，跳过处理")
+                return {"status": "no_valid_foreshadowing"}
+            
+            logging.info(f"本章涉及伏笔编号列表：{', '.join(foreshadowing_ids)}")
+
         # 从向量库中检索伏笔内容
         # 使用传入的 embedding_adapter 参数加载向量库
         
@@ -214,14 +228,24 @@ def process_and_vectorize_foreshadowing(chapter_text, chapter_info, filepath, em
         # 2. 获取当前章节伏笔内容
         from prompt_definitions import foreshadowing_content_processing_prompt
         
-        # 构建伏笔ID列表字符串
-        foreshadowing_ids_str = "\n".join([f"- {fb_id}" for fb_id in foreshadowing_ids])
+        # 构建伏笔条目字符串，使用完整的伏笔条目信息
+        foreshadowing_entries = []
+        if chapter_info and 'foreshadowing' in chapter_info and chapter_info['foreshadowing']:
+            # 将伏笔条目按行分割
+            entries = chapter_info['foreshadowing'].split('\n')
+            for entry in entries:
+                # 只保留包含伏笔编号和明确是本章需要处理的伏笔条目
+                if any(fb_id in entry for fb_id in foreshadowing_ids):
+                    foreshadowing_entries.append(entry.strip())
+        
+        # 合并所有伏笔条目
+        foreshadowing_entries_str = "\n".join(foreshadowing_entries)
         
         # 构建当前章节伏笔内容提示词
         content_prompt = foreshadowing_content_processing_prompt.format(
             novel_number=chapter_number,
             chapter_title=chapter_title,
-            foreshadowing_ids=foreshadowing_ids_str,
+            foreshadowing_entries=foreshadowing_entries_str,  # 使用完整的伏笔条目替代原来的伏笔ID列表
             chapter_text=chapter_text
         )
         

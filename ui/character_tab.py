@@ -21,7 +21,7 @@ def build_character_tab(self):
         btn_frame, 
         text="加载 角色状态.txt", 
         command=lambda: self.load_character_file("角色状态.txt"), 
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     load_state_btn.pack(side="left", padx=(0,5))
 
@@ -30,7 +30,7 @@ def build_character_tab(self):
         btn_frame, 
         text="加载 待用角色.txt", 
         command=lambda: self.load_character_file("待用角色.txt"), 
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     load_standby_btn.pack(side="left", padx=(0,5))
     
@@ -39,17 +39,26 @@ def build_character_tab(self):
         btn_frame, 
         text="加载 角色数据库.txt", 
         command=lambda: self.load_character_file("角色数据库.txt"), 
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     )
     load_all_chars_btn.pack(side="left", padx=(0,5))
+    
+    # 修复角色数据库.txt按钮
+    repair_all_chars_btn = ctk.CTkButton(
+        btn_frame, 
+        text="修复 角色数据库.txt", 
+        command=self.repair_character_database, 
+        font=("Microsoft YaHei", 14)
+    )
+    repair_all_chars_btn.pack(side="left", padx=0)
 
-    self.character_wordcount_label = ctk.CTkLabel(self.character_tab, text="字数：0", font=("Microsoft YaHei", 12))
+    self.character_wordcount_label = ctk.CTkLabel(self.character_tab, text="字数：0", font=("Microsoft YaHei", 14))
     self.character_wordcount_label.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-    save_btn = ctk.CTkButton(self.character_tab, text="保存修改", command=self.save_character_state, font=("Microsoft YaHei", 12))
+    save_btn = ctk.CTkButton(self.character_tab, text="保存修改", command=self.save_character_state, font=("Microsoft YaHei", 14))
     save_btn.grid(row=0, column=2, padx=5, pady=5, sticky="e")
 
-    self.character_text = ctk.CTkTextbox(self.character_tab, wrap="word", font=("Microsoft YaHei", 12))
+    self.character_text = ctk.CTkTextbox(self.character_tab, wrap="word", font=("Microsoft YaHei", 14))
     
     def update_word_count(event=None):
         text = self.character_text.get("0.0", "end-1c")

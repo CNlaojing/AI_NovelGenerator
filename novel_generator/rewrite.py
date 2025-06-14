@@ -6,11 +6,12 @@
 import os
 import re
 import logging
+import traceback  # 添加traceback模块导入
 from typing import Dict, List, Tuple
 
 from llm_adapters import create_llm_adapter
 from utils import read_file
-from prompt_definitions import chapter_rewrite_prompt # 移除 foreshadowing_extraction_prompt
+from prompt_definitions import chapter_rewrite_prompt
 from novel_generator.common import invoke_with_cleaning
 from novel_generator.vectorstore_utils import get_relevant_context_from_vector_store
 
@@ -289,67 +290,63 @@ def get_foreshadow_type(fid: str) -> str:
     return type_map.get(prefix, '未知类型')
 
 
-def rewrite_chapter(current_text: str, filepath: str, novel_number: int, **kwargs) -> str:
-    """改写章节内容"""
+def rewrite_chapter(
+    current_text: str,
+    filepath: str,
+    novel_number: int,
+    interface_format: str,
+    api_key: str,
+    base_url: str,
+    model_name: str,
+    temperature: float = 0.7,
+    max_tokens: int = 4096,
+    timeout: int = 600,
+    embedding_interface_format: str = "OpenAI",
+    embedding_api_key: str = "",
+    embedding_base_url: str = "https://api.openai.com/v1",
+    embedding_model_name: str = "text-embedding-ada-002"
+) -> str:
+    """
+    改写章节内容
+    
+    Args:
+        current_text: 原始文本/提示词
+        filepath: 文件保存路径
+        novel_number: 章节编号 
+        interface_format: LLM接口格式
+        api_key: API密钥
+        base_url: API基础URL 
+        model_name: 语言模型名称
+        temperature: 温度参数
+        max_tokens: 最大令牌数
+        timeout: 超时时间
+        embedding_interface_format: 嵌入接口格式
+        embedding_api_key: 嵌入API密钥
+        embedding_base_url: 嵌入API基础URL
+        embedding_model_name: 嵌入模型名称
+    Returns:
+        改写后的文本
+    """
+    from llm_adapters import create_llm_adapter
+    
     try:
-        # 1. 获取伏笔信息
-        # blueprint_text (章节目录) 是必需的，以便 extract_chapter_foreshadowing 工作
-        blueprint_file_path = os.path.join(filepath, "章节目录.txt")
-        blueprint_text = read_file(blueprint_file_path)
-        if blueprint_text is None:
-            logging.warning(f"未能读取章节目录文件: {blueprint_file_path}，伏笔信息将为空。")
-            blueprint_text = "" # 提供默认值以避免后续错误
-        
-        # extract_chapter_foreshadowing 在当前文件中定义
-        foreshadowing_details = extract_chapter_foreshadowing(blueprint_text, novel_number)
-        
-        # 2. 获取重写所需的知识库内容过滤 (相关背景资料)
-        # process_knowledge_context 在当前文件中定义
-        relevant_context = process_knowledge_context(
-            filepath,
-            current_text,
-            embedding_interface_format=kwargs.get("embedding_interface_format", "OpenAI"),
-            embedding_api_key=kwargs.get("embedding_api_key", ""),
-            embedding_base_url=kwargs.get("embedding_base_url", "https://api.openai.com/v1"),
-            embedding_model_name=kwargs.get("embedding_model_name", "text-embedding-ada-002")
-        )
-        
-        # 3. 使用传入的提示词
-        # current_text 是从UI编辑器传来的完整内容，它已经包含了完整的提示词
-        # 不需要再次构建提示词，直接使用current_text作为提示词
-        logging.info("使用UI传入的提示词进行改写，不再重复构建提示词")
-        prompt_payload = current_text
-        
-        # 4. 调用LLM进行改写
         llm_adapter = create_llm_adapter(
-            interface_format=kwargs.get("interface_format", "OpenAI"),
-            base_url=kwargs.get("base_url", "https://api.openai.com/v1"),
-            model_name=kwargs.get("model_name", "gpt-4o-mini"), # 注意这里参数名是 model_name
-            api_key=kwargs.get("api_key", ""),
-            temperature=kwargs.get("temperature", 0.7),
-            max_tokens=kwargs.get("max_tokens", 8192),
-            timeout=kwargs.get("timeout", 600)
+            interface_format=interface_format,
+            base_url=base_url,
+            model_name=model_name,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout
         )
-
-        rewritten_text = invoke_with_cleaning(llm_adapter, prompt_payload) # Use default max_retries
-
-        if rewritten_text:
-            logging.info(f"章节 {novel_number} 改写成功。")
-            return rewritten_text
-        else:
-            logging.error(f"章节 {novel_number} 改写失败，LLM未返回有效内容。")
-            return None
         
-    except KeyError as ke:
-        logging.error(f"改写章节 {novel_number} 时发生 KeyError: {str(ke)}. kwargs: {kwargs}")
-        import traceback
-        logging.error(traceback.format_exc())
-        return None
+        # current_text 已经是完整的提示词，直接使用
+        return invoke_with_cleaning(llm_adapter, current_text)
+        
     except Exception as e:
-        logging.error(f"改写章节 {novel_number} 时发生严重错误: {type(e).__name__} - {str(e)}")
-        import traceback
+        logging.error(f"改写章节时出错: {str(e)}")
         logging.error(traceback.format_exc())
-        return None
+        return ""
 
 
 def process_knowledge_context(

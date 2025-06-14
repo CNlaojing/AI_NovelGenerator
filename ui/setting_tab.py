@@ -12,16 +12,16 @@ def build_setting_tab(self):
     self.setting_tab.rowconfigure(1, weight=1)
     self.setting_tab.columnconfigure(0, weight=1)
 
-    load_btn = ctk.CTkButton(self.setting_tab, text="加载 小说设定.txt", command=self.load_novel_architecture, font=("Microsoft YaHei", 12))
+    load_btn = ctk.CTkButton(self.setting_tab, text="加载 小说设定.txt", command=self.load_novel_architecture, font=("Microsoft YaHei", 14))
     load_btn.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
-    self.setting_word_count_label = ctk.CTkLabel(self.setting_tab, text="字数：0", font=("Microsoft YaHei", 12))
+    self.setting_word_count_label = ctk.CTkLabel(self.setting_tab, text="字数：0", font=("Microsoft YaHei", 14))
     self.setting_word_count_label.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-    save_btn = ctk.CTkButton(self.setting_tab, text="保存修改", command=self.save_novel_architecture, font=("Microsoft YaHei", 12))
+    save_btn = ctk.CTkButton(self.setting_tab, text="保存修改", command=self.save_novel_architecture, font=("Microsoft YaHei", 14))
     save_btn.grid(row=0, column=2, padx=5, pady=5, sticky="e")
 
-    self.setting_text = ctk.CTkTextbox(self.setting_tab, wrap="word", font=("Microsoft YaHei", 12))
+    self.setting_text = ctk.CTkTextbox(self.setting_tab, wrap="word", font=("Microsoft YaHei", 14))
     TextWidgetContextMenu(self.setting_text)
     self.setting_text.grid(row=1, column=0, sticky="nsew", padx=5, pady=5, columnspan=3)
 

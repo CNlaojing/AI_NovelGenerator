@@ -11,7 +11,7 @@ from utils import read_file, save_string_to_txt  # 导入 utils 中的函数
 from novel_generator.common import invoke_with_cleaning  # 新增导入
 from prompt_definitions import Character_Import_Prompt
 
-DEFAULT_FONT = ("Microsoft YaHei", 12)
+DEFAULT_FONT = ("Microsoft YaHei", 14)
 
 class RoleLibrary:
     def __init__(self, master, save_path, llm_adapter):  # 新增llm_adapter参数
@@ -454,13 +454,13 @@ class RoleLibrary:
                 
                 # 角色名称
                 lbl = ctk.CTkLabel(frame, text=role_name, 
-                                 font=("Microsoft YaHei", 12))
+                                 font=("Microsoft YaHei", 14))
                 lbl.pack(side="left", padx=5)
                 
                 # 属性摘要
                 attrs = [f"{k}({len(v)})" for k,v in attributes.items()]
                 summary = ctk.CTkLabel(frame, text=" | ".join(attrs), 
-                                     font=("Microsoft YaHei", 12),
+                                     font=("Microsoft YaHei", 14),
                                      text_color="gray")
                 summary.pack(side="right", padx=10)
                 
@@ -565,13 +565,13 @@ class RoleLibrary:
             
             # 角色名称标签
             lbl = ctk.CTkLabel(frame, text=role['name'], 
-                             font=("Microsoft YaHei", 12))
+                             font=("Microsoft YaHei", 14))
             lbl.pack(side="left", padx=5)
             
             # 属性摘要
             attrs = [f"{k}({len(v)})" for k,v in role['attributes'].items()]
             summary = ctk.CTkLabel(frame, text=" | ".join(attrs), 
-                                 font=("Microsoft YaHei", 12),
+                                 font=("Microsoft YaHei", 14),
                                  text_color="gray")
             summary.pack(side="right", padx=10)
             
@@ -1089,7 +1089,7 @@ class RoleLibrary:
                     self.scroll_frame,
                     text=cat,
                     width=80,
-                    font=("Microsoft YaHei", 12),
+                    font=("Microsoft YaHei", 14),
                     command=lambda c=cat: self.show_category(c)
                 )
                 btn.pack(side="left", padx=2)
@@ -1117,7 +1117,7 @@ class RoleLibrary:
 
         # 固定按钮
         ctk.CTkButton(category_frame, text="全部", width=50,
-                      font=("Microsoft YaHei", 12),
+                      font=("Microsoft YaHei", 14),
                       command=lambda: self.show_category("全部")).pack(side="left", padx=2)
 
         # 滚动分类区

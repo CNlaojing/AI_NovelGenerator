@@ -33,6 +33,7 @@ from ui.generation_handlers import (
     show_consistency_check_results_ui,
     import_knowledge_handler,
     clear_vectorstore_handler,
+    repair_character_database
 )
 from ui.setting_tab import build_setting_tab, load_novel_architecture, save_novel_architecture
 from ui.directory_tab import build_directory_tab, load_chapter_blueprint, save_chapter_blueprint, load_text_file
@@ -186,6 +187,7 @@ class NovelGeneratorGUI:
         self.do_consistency_check = do_consistency_check.__get__(self)
         self.import_knowledge_handler = import_knowledge_handler.__get__(self)
         self.clear_vectorstore_handler = clear_vectorstore_handler.__get__(self)
+        self.repair_character_database = repair_character_database.__get__(self)
         self.show_plot_arcs_ui = show_plot_arcs_ui.__get__(self)
         self.rewrite_chapter_ui = rewrite_chapter_ui.__get__(self)
         self.show_rewrite_prompt_editor = show_rewrite_prompt_editor.__get__(self)
@@ -352,7 +354,7 @@ class NovelGeneratorGUI:
                     
                     # 添加分类标签
                     category_label = ctk.CTkLabel(category_frame, text=f"【{category}】", 
-                                                font=("Microsoft YaHei", 12, "bold"))
+                                                font=("Microsoft YaHei", 14, "bold"))
                     category_label.grid(row=0, column=0, padx=(0,10), sticky="w")
                     
                     # 初始化角色排列参数
@@ -442,7 +444,8 @@ class NovelGeneratorGUI:
         donate_window.title("感谢支持")
         donate_window.geometry("800x900")
         donate_window.resizable(False, False)
-        
+        donate_window.attributes('-topmost', True)  # 设置为置顶窗口
+        donate_window.protocol("WM_ICONIFY_WINDOW", lambda: donate_window())        
         # 标题文本
         title_text = (
             "AI_NovelGenerator (CNlaojing Fork)\n"
@@ -455,7 +458,7 @@ class NovelGeneratorGUI:
             text=title_text,
             wraplength=380,
             justify="left",
-            font=("Microsoft YaHei", 12)
+            font=("Microsoft YaHei", 14)
         )
         title_label.pack(pady=(20, 10), padx=10)
         
@@ -474,7 +477,7 @@ class NovelGeneratorGUI:
             error_label = ctk.CTkLabel(
                 image_frame,
                 text="无法加载二维码图片",
-                font=("Microsoft YaHei", 12)
+                font=("Microsoft YaHei", 14)
             )
             error_label.pack(pady=20)
             print(f"Error loading image: {e}")
@@ -484,7 +487,7 @@ class NovelGeneratorGUI:
         bottom_label = ctk.CTkLabel(
             donate_window,
             text=bottom_text,
-            font=("Microsoft YaHei", 12)
+            font=("Microsoft YaHei", 14)
         )
         bottom_label.pack(pady=(10, 20))
 

@@ -44,23 +44,8 @@ def do_consistency_check(self, *args, **kwargs):
             self.safe_log(f"读取角色状态文件时出错: {str(e)}")
 
     # 获取小说设定中的章节字数和类型
-    word_number = 3000  # 默认值
-    genre = "奇幻"  # 默认值
-    novel_setting_file = os.path.join(filepath, "小说设定.txt")
-    if os.path.exists(novel_setting_file):
-        try:
-            novel_setting = read_file(novel_setting_file)
-            word_number_pattern = re.compile(r'每章(\d+)字', re.MULTILINE)
-            word_number_match = word_number_pattern.search(novel_setting)
-            if word_number_match:
-                word_number = int(word_number_match.group(1))
-            
-            # 提取小说类型，只获取类型而不包含篇幅信息
-            genre_match = re.search(r"类型：([^,，]+)", novel_setting)
-            if genre_match:
-                genre = genre_match.group(1).strip()
-        except Exception as e:
-            self.safe_log(f"读取小说设定文件时出错: {str(e)}")
+    word_number = self.safe_get_int(self.word_number_var, 3000)
+    genre = self.genre_var.get().strip()    
 
     api_key = self.api_key_var.get().strip()
     base_url = self.base_url_var.get().strip()
@@ -248,20 +233,19 @@ def do_consistency_check(self, *args, **kwargs):
     prompt_dialog.transient(self.master)
     prompt_dialog.grab_set()
     prompt_dialog.attributes('-topmost', True)  # 设置为置顶窗口
-    
-    # 禁止最小化窗口
-    prompt_dialog.protocol("WM_ICONIFY_WINDOW", lambda: prompt_dialog.deiconify())
+    prompt_dialog.protocol("WM_ICONIFY_WINDOW", lambda: prompt_dialog.deiconify())   
+
     # 初始化用户确认标志
     prompt_dialog.user_confirmed = False
     
     # 创建提示词编辑框
-    prompt_text = ctk.CTkTextbox(prompt_dialog, wrap="word", font=("Microsoft YaHei", 12))
+    prompt_text = ctk.CTkTextbox(prompt_dialog, wrap="word", font=("Microsoft YaHei", 14))
     prompt_text.pack(fill="both", expand=True, padx=10, pady=(10, 5))
     prompt_text.insert("0.0", prompt)
     
     # 创建字数统计标签
     word_count_var = tk.StringVar(value=f"当前字数: {len(prompt)}")
-    word_count_label = ctk.CTkLabel(prompt_dialog, textvariable=word_count_var, font=("Microsoft YaHei", 12))
+    word_count_label = ctk.CTkLabel(prompt_dialog, textvariable=word_count_var, font=("Microsoft YaHei", 14))
     word_count_label.pack(pady=(0, 5))
     
     # 更新字数统计的函数
@@ -298,7 +282,7 @@ def do_consistency_check(self, *args, **kwargs):
         text="确认", 
         command=handle_confirm_click,
         width=100,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     ).pack(side="left", padx=10)
     
     ctk.CTkButton(
@@ -306,7 +290,7 @@ def do_consistency_check(self, *args, **kwargs):
         text="取消", 
         command=handle_cancel_click,
         width=100,
-        font=("Microsoft YaHei", 12)
+        font=("Microsoft YaHei", 14)
     ).pack(side="left", padx=10)
     
     # 定义使用提示词处理的函数
@@ -665,11 +649,11 @@ def check_consistency(
         # 获取用户指导内容
         user_guidance = ""
         try:
-            # 从主界面获取内容指导编辑框的内容
-            if hasattr(self, 'user_guide_text'):
-                user_guidance = self.user_guide_text.get("0.0", "end").strip()
-            elif hasattr(self.master, 'user_guide_text'):
-                user_guidance = self.master.user_guide_text.get("0.0", "end").strip()
+            # 从配置文件或其他方式获取用户指导内容，而不是依赖self
+            user_setting_file = os.path.join(filepath, "user_guidance.txt")
+            if os.path.exists(user_setting_file):
+                with open(user_setting_file, 'r', encoding='utf-8') as f:
+                    user_guidance = f.read().strip()
         except Exception as e:
             logging.error(f"获取用户指导内容时出错: {str(e)}")
             
@@ -681,7 +665,6 @@ def check_consistency(
                 novel_number=novel_number,
                 chapter_title=chapter_title,  # 使用更准确提取的章节标题
                 word_number=word_number,  # 添加章节字数
-                genre=genre,  # 添加小说类型
                 chapter_role=chapter_info['chapter_role'],
                 chapter_purpose=chapter_info['chapter_purpose'],
                 suspense_type=chapter_info['suspense_type'],

@@ -547,7 +547,7 @@ def get_chapter_content(fid: str, chapter_num: int, filepath: str) -> dict:
         chapter_fid_patterns = [
             f"-第{chapter_num}章：{fid}",  # 标准格式
             f"-第{chapter_num}章:{fid}",   # 无空格格式
-            f"第{chapter_num}章.*?{fid}"   # 宽松格式
+            f"-第{chapter_num}章.*?{fid}"   # 宽松格式
         ]
         
         for pattern in chapter_fid_patterns:
@@ -1217,55 +1217,31 @@ def generate_volume_chapters(
         # 6. 调用LLM生成内容并处理
         # 显示提示词编辑器 - 修复对话框实现
         def show_prompt_editor(prompt_text, callback):
+            """显示章节生成提示词编辑器"""
             import tkinter as tk
-            import customtkinter as ctk  # 使用 customtkinter 替代 ttk
+            import customtkinter as ctk
             
+            # 创建主窗口并设置基本属性
             dialog = ctk.CTkToplevel()
+            dialog.withdraw()  # 先隐藏窗口，等所有组件都准备好再显示
             dialog.title("编辑章节生成提示词")
             dialog.geometry("800x600")
-            dialog.attributes('-topmost', True)  # 设置为置顶窗口
             
-            # 禁止最小化窗口
-            dialog.protocol("WM_ICONIFY_WINDOW", lambda: dialog.deiconify())
+            # 创建所有组件
+            main_frame = ctk.CTkFrame(dialog)
+            main_frame.pack(fill="both", expand=True, padx=5, pady=5)
             
-            # 使用 CTkTextbox 替代 ttk.Text
-            textbox = ctk.CTkTextbox(dialog, wrap="word", font=("Microsoft YaHei", 12))
-            textbox.pack(fill="both", expand=True, padx=10, pady=10)
+            # 创建文本框
+            textbox = ctk.CTkTextbox(main_frame, wrap="word", font=("Microsoft YaHei", 14))
+            textbox.pack(fill="both", expand=True, padx=5, pady=5)
             textbox.insert("1.0", prompt_text)
             
-            btn_frame = ctk.CTkFrame(dialog)
-            btn_frame.pack(pady=10)
+            # 创建按钮框架
+            btn_frame = ctk.CTkFrame(main_frame)
+            btn_frame.pack(pady=5)
             
-            def on_confirm():
-                modified_prompt = textbox.get("1.0", "end-1c")
-                dialog.destroy()
-                callback(modified_prompt)
-                
-            def on_cancel():
-                dialog.destroy()
-                callback(None)
-                
-            # 使用 CTkButton 替代 ttk.Button
-            ctk.CTkButton(
-                btn_frame, 
-                text="确认生成", 
-                command=on_confirm,
-                font=("Microsoft YaHei", 12)
-            ).pack(side="left", padx=5)
-            
-            ctk.CTkButton(
-                btn_frame, 
-                text="取消", 
-                command=on_cancel,
-                font=("Microsoft YaHei", 12)
-            ).pack(side="left", padx=5)
-            
-            # 使用 CTkLabel 替代 ttk.Label
-            word_count_label = ctk.CTkLabel(
-                btn_frame, 
-                text="字数: 0",
-                font=("Microsoft YaHei", 12)
-            )
+            # 创建计数标签
+            word_count_label = ctk.CTkLabel(btn_frame, text="字数: 0", font=("Microsoft YaHei", 14))
             word_count_label.pack(side="right", padx=10)
             
             def update_word_count(event=None):
@@ -1273,13 +1249,56 @@ def generate_volume_chapters(
                 words = len(text)
                 word_count_label.configure(text=f"字数: {words}")
             
-            textbox.bind("<KeyRelease>", update_word_count)
-            update_word_count()
+            def on_confirm():
+                modified_prompt = textbox.get("1.0", "end-1c")
+                dialog.destroy()
+                callback(modified_prompt)
             
+            def on_cancel():
+                dialog.destroy()
+                callback(None)
+            
+            # 创建按钮
+            ctk.CTkButton(
+                btn_frame,
+                text="确认生成",
+                command=on_confirm,
+                font=("Microsoft YaHei", 14)
+            ).pack(side="left", padx=5)
+            
+            ctk.CTkButton(
+                btn_frame,
+                text="取消",
+                command=on_cancel,
+                font=("Microsoft YaHei", 14)
+            ).pack(side="left", padx=5)
+            
+            # 绑定事件
+            textbox.bind("<KeyRelease>", update_word_count)
             dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+            dialog.bind("<Escape>", lambda e: on_cancel())
+            
+            # 确保所有组件都已创建完毕
+            dialog.update_idletasks()
+            
+            # 设置窗口属性
             dialog.transient(dialog.master)
             dialog.grab_set()
-        
+            
+            # 防止窗口被最小化
+            def prevent_minimize():
+                dialog.deiconify()
+                dialog.focus_force()
+            dialog.protocol("WM_ICONIFY_WINDOW", prevent_minimize)
+            
+            # 显示窗口并设置焦点
+            dialog.deiconify()
+            dialog.focus_force()
+            textbox.focus_set()
+            
+            # 初始更新字数统计
+            update_word_count()
+
         # 异步调用LLM
         def async_llm_call(prompt, callback):
             def llm_thread():
