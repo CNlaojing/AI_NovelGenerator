@@ -2048,7 +2048,7 @@ def generate_novel_architecture_ui(self):
                     timeout=timeout_val,
                     user_guidance=user_guidance  # 添加内容指导参数
                 )
-                self.safe_log("✅ 小说架构生成完成。请在 'Novel Architecture' 标签页查看或编辑。")
+                self.safe_log("✅ 小说架构生成完成。请在 '小说架构' 标签页查看或编辑。")
             except PermissionError as e:
                 error_msg = f"文件访问权限错误: {str(e)}\n请关闭所有可能正在使用相关文件的应用程序，然后重试。\n如果问题仍然存在，请尝试重启应用程序或计算机。"
                 self.safe_log(f"❌ {error_msg}")
