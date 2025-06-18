@@ -63,41 +63,45 @@ def build_config_tabview(self):
 def build_ai_config_tab(self):
     def on_interface_format_changed(new_value):
         self.interface_format_var.set(new_value)
+        
+        # 先加载已保存的配置
         config_data = load_config(self.config_file)
-        if config_data:
-            config_data["last_interface_format"] = new_value
-            save_config(config_data, self.config_file)
-        if self.loaded_config and "llm_configs" in self.loaded_config and new_value in self.loaded_config["llm_configs"]:
-            llm_conf = self.loaded_config["llm_configs"][new_value]
+        self.loaded_config = config_data  # 更新loaded_config
+        
+        if config_data and "llm_configs" in config_data and new_value in config_data["llm_configs"]:
+            # 如果有保存的配置，优先使用保存的配置
+            llm_conf = config_data["llm_configs"][new_value]
             self.api_key_var.set(llm_conf.get("api_key", ""))
-            self.base_url_var.set(llm_conf.get("base_url", self.base_url_var.get()))
+            self.base_url_var.set(llm_conf.get("base_url", ""))
             self.model_name_var.set(llm_conf.get("model_name", ""))
             self.temperature_var.set(llm_conf.get("temperature", 0.7))
             self.max_tokens_var.set(llm_conf.get("max_tokens", 8192))
             self.timeout_var.set(llm_conf.get("timeout", 600))
         else:
-            if new_value == "Ollama":
-                self.base_url_var.set("http://localhost:11434/v1")
-            elif new_value == "ML Studio":
-                self.base_url_var.set("http://localhost:1234/v1")
-            elif new_value == "OpenAI":
-                self.base_url_var.set("https://api.openai.com/v1")
-                self.model_name_var.set("gpt-4o-mini")
-            elif new_value == "Azure OpenAI":
-                self.base_url_var.set("https://[az].openai.azure.com/openai/deployments/[model]/chat/completions?api-version=2024-08-01-preview")
-            elif new_value == "DeepSeek":
-                self.base_url_var.set("https://api.deepseek.com/v1")
-                self.model_name_var.set("deepseek-chat")
-            elif new_value == "Gemini":
-                self.base_url_var.set("")
-            elif new_value == "Azure AI":
-                self.base_url_var.set("https://<your-endpoint>.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview")
-            elif new_value == "阿里云百炼":
-                self.base_url_var.set("https://dashscope.aliyuncs.com/compatible-mode/v1")
-                self.model_name_var.set("qwen-plus")
-            elif new_value == "硅基流动":
-                self.base_url_var.set("https://api.siliconflow.cn/v1")
-                self.model_name_var.set("deepseek-ai/DeepSeek-V3")
+            # 如果没有保存的配置，使用默认值，但不设置默认的model_name
+            default_configs = {
+                "Ollama": {"base_url": "http://localhost:11434/v1"},
+                "ML Studio": {"base_url": "http://localhost:1234/v1"},
+                "OpenAI": {"base_url": "https://api.openai.com/v1"},
+                "Azure OpenAI": {"base_url": "https://[az].openai.azure.com/openai/deployments/[model]/chat/completions?api-version=2024-08-01-preview"},
+                "DeepSeek": {"base_url": "https://api.deepseek.com/v1"},
+                "Gemini": {"base_url": ""},
+                "Azure AI": {"base_url": "https://<your-endpoint>.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview"},
+                "阿里云百炼": {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
+                "火山引擎": {"base_url": "https://ark.cn-beijing.volces.com/api/v3"},
+                "硅基流动": {"base_url": "https://api.siliconflow.cn/v1"}
+            }
+            
+            if new_value in default_configs:
+                self.base_url_var.set(default_configs[new_value]["base_url"])
+                # 清空model_name，等待用户选择或从API获取
+                self.model_name_var.set("")
+                # 其他值保持不变
+
+        # 保存最后使用的接口格式
+        if config_data:
+            config_data["last_interface_format"] = new_value
+            save_config(config_data, self.config_file)
 
     for i in range(7):
         self.ai_config_tab.grid_rowconfigure(i, weight=0)
@@ -329,16 +333,21 @@ def build_embeddings_config_tab(self):
 def load_config_btn(self):
     cfg = load_config(self.config_file)
     if cfg:
+        self.loaded_config = cfg  # 保存加载的配置
         last_llm = cfg.get("last_interface_format", "OpenAI")
         last_embedding = cfg.get("last_embedding_interface_format", "OpenAI")
+        
+        # 先设置接口格式
         self.interface_format_var.set(last_llm)
         self.embedding_interface_format_var.set(last_embedding)
+        
+        # 加载LLM配置
         llm_configs = cfg.get("llm_configs", {})
         if last_llm in llm_configs:
             llm_conf = llm_configs[last_llm]
             self.api_key_var.set(llm_conf.get("api_key", ""))
-            self.base_url_var.set(llm_conf.get("base_url", "https://api.openai.com/v1"))
-            self.model_name_var.set(llm_conf.get("model_name", "gpt-4o-mini"))
+            self.base_url_var.set(llm_conf.get("base_url", ""))  # 不使用默认值
+            self.model_name_var.set(llm_conf.get("model_name", ""))  # 不使用默认值
             self.temperature_var.set(llm_conf.get("temperature", 0.7))
             self.max_tokens_var.set(llm_conf.get("max_tokens", 8192))
             self.timeout_var.set(llm_conf.get("timeout", 600))
