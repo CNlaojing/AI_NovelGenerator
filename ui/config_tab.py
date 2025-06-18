@@ -6,6 +6,9 @@ import customtkinter as ctk
 
 from config_manager import load_config, save_config
 from tooltips import tooltips
+import threading
+import logging
+from llm_adapters import create_llm_adapter
 
 
 def create_label_with_help(self, parent, label_text, tooltip_key, row, column,
@@ -119,10 +122,107 @@ def build_ai_config_tab(self):
     interface_dropdown = ctk.CTkOptionMenu(self.ai_config_tab, values=interface_options, variable=self.interface_format_var, command=on_interface_format_changed, font=("Microsoft YaHei", 14))
     interface_dropdown.grid(row=2, column=1, padx=5, pady=5, columnspan=2, sticky="nsew")
 
-    # 4) Model Name
+    # 4) Model Name - 改为下拉菜单 + 允许手动输入
     create_label_with_help(self, parent=self.ai_config_tab, label_text="Model Name:", tooltip_key="model_name", row=3, column=0, font=("Microsoft YaHei", 14))
-    model_name_entry = ctk.CTkEntry(self.ai_config_tab, textvariable=self.model_name_var, font=("Microsoft YaHei", 14))
-    model_name_entry.grid(row=3, column=1, padx=5, pady=5, columnspan=2, sticky="nsew")
+    
+    # 创建ComboBox而不是OptionMenu，允许手动输入
+    self.model_name_combo = ctk.CTkComboBox(
+        self.ai_config_tab, 
+        values=["加载中..."],
+        variable=self.model_name_var,
+        font=("Microsoft YaHei", 14),
+        state="normal"  # 改为normal允许手动输入
+    )
+    self.model_name_combo.grid(row=3, column=1, padx=5, pady=5, columnspan=2, sticky="nsew")
+    
+    # 修改变更事件处理函数的定义
+    def on_api_key_change(*args):
+        # 使用外部的self引用
+        refresh_models(self)
+        
+    def on_base_url_change(*args):
+        # 使用外部的self引用
+        refresh_models(self)
+    
+    self.api_key_var.trace_add("write", on_api_key_change)
+    self.base_url_var.trace_add("write", on_base_url_change)
+
+    def refresh_models(self_ref):
+        """异步刷新模型列表"""
+        def fetch_models_async():
+            try:
+                interface_format = self_ref.interface_format_var.get().strip()
+                api_key = self_ref.api_key_var.get().strip()
+                base_url = self_ref.base_url_var.get().strip()
+                
+                if not api_key or not base_url:
+                    return
+                
+                # 保存当前模型名称
+                current_model = self_ref.model_name_var.get().strip()
+                
+                # 更新UI显示加载状态
+                self_ref.master.after(0, lambda: self_ref.model_name_combo.configure(values=["正在加载..."]))
+                
+                # 创建适配器实例
+                adapter = create_llm_adapter(
+                    interface_format=interface_format,
+                    base_url=base_url,
+                    model_name="",
+                    api_key=api_key,
+                    temperature=0.7,
+                    max_tokens=2048,
+                    timeout=60
+                )
+                
+                if adapter:
+                    # 获取模型列表
+                    available_models = adapter.get_available_models()
+                    
+                    # 在主线程中更新UI
+                    def update_ui():
+                        if available_models:
+                            # 如果当前有已保存的模型名称
+                            if current_model:
+                                # 如果当前模型不在列表中，将其添加到列表开头
+                                if current_model not in available_models:
+                                    available_models.insert(0, current_model)
+                                self_ref.model_name_var.set(current_model)  # 保持当前选择
+                            
+                            self_ref.model_name_combo.configure(values=available_models)
+                            
+                            # 如果没有当前模型，设置第一个可用模型
+                            if not current_model and available_models:
+                                self_ref.model_name_var.set(available_models[0])
+                        else:
+                            # 如果获取失败但有已保存的模型名称，保留它
+                            if current_model:
+                                self_ref.model_name_combo.configure(values=[current_model])
+                                self_ref.model_name_var.set(current_model)
+                            else:
+                                self_ref.model_name_combo.configure(values=["无可用模型"])
+                    
+                    self_ref.master.after(0, update_ui)
+                else:
+                    # 如果创建适配器失败但有已保存的模型名称，保留它
+                    if current_model:
+                        self_ref.master.after(0, lambda: self_ref.model_name_combo.configure(values=[current_model]))
+                    else:
+                        self_ref.master.after(0, lambda: self_ref.model_name_combo.configure(values=["创建适配器失败"]))
+            
+            except Exception as e:
+                # 如果出错但有已保存的模型名称，保留它
+                if current_model := self_ref.model_name_var.get().strip():
+                    self_ref.master.after(0, lambda: self_ref.model_name_combo.configure(values=[current_model]))
+                else:
+                    self_ref.master.after(0, lambda: self_ref.model_name_combo.configure(values=["获取模型列表失败"]))
+                logging.error(f"刷新模型列表失败: {e}")
+        
+        # 启动后台线程获取模型列表
+        threading.Thread(target=fetch_models_async, daemon=True).start()
+
+    # 将refresh_models函数绑定到实例
+    self.refresh_models = lambda: refresh_models(self)
 
     # 5) Temperature
     create_label_with_help(self, parent=self.ai_config_tab, label_text="Temperature:", tooltip_key="temperature", row=4, column=0, font=("Microsoft YaHei", 14))
