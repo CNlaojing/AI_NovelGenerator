@@ -36,6 +36,18 @@ class BaseLLMAdapter:
     """
     def invoke(self, prompt: str) -> str:
         raise NotImplementedError("Subclasses must implement .invoke(prompt) method.")
+    
+    def get_available_models(self) -> list:
+        """获取可用模型列表"""
+        try:
+            return self._fetch_models()
+        except Exception as e:
+            logging.error(f"获取模型列表失败: {e}")
+            return []
+            
+    def _fetch_models(self) -> list:
+        """实际获取模型列表的方法，由子类实现"""
+        return []
 
 class DeepSeekAdapter(BaseLLMAdapter):
     """
@@ -64,6 +76,16 @@ class DeepSeekAdapter(BaseLLMAdapter):
             logging.warning("No response from DeepSeekAdapter.")
             return ""
         return response.content
+    
+    def _fetch_models(self) -> list:
+        try:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            response = requests.get(f"{self.base_url}/models", headers=headers)
+            if response.status_code == 200:
+                return [model["id"] for model in response.json().get("data", [])]
+        except Exception as e:
+            logging.error(f"获取DeepSeek模型列表失败: {e}")
+        return ["deepseek-chat", "deepseek-coder"]
 
 class OpenAIAdapter(BaseLLMAdapter):
     """
@@ -92,6 +114,52 @@ class OpenAIAdapter(BaseLLMAdapter):
             logging.warning("No response from OpenAIAdapter.")
             return ""
         return response.content
+    
+    def _fetch_models(self) -> list:
+        """获取OpenAI兼容接口的可用模型列表"""
+        import urllib3
+        # 禁用 SSL 警告
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # 使用更短的超时时间，禁用 SSL 验证
+            response = requests.get(
+                f"{self.base_url}/models",
+                headers=headers,
+                timeout=5,  # 5秒超时
+                verify=False,  # 禁用 SSL 验证
+                allow_redirects=True
+            )
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    if "data" in data:
+                        models = [model["id"] for model in data["data"]]
+                        gpt_models = [m for m in models if any(x in m.lower() 
+                            for x in ['gpt', 'text-davinci', 'deepseek', 'qwen', 'gemini', 'palm'])]
+                        if gpt_models:
+                            return gpt_models
+                except Exception as e:
+                    logging.error(f"解析模型列表失败: {e}")
+            
+            # 如果请求失败或没有找到模型，返回默认值
+            return ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo-preview", "deepseek-chat"]
+            
+        except requests.exceptions.ConnectTimeout:
+            logging.error(f"连接 {self.base_url} 超时")
+            return ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo-preview", "deepseek-chat"]
+        except requests.exceptions.RequestException as e:
+            logging.error(f"请求失败: {e}")
+            return ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo-preview", "deepseek-chat"]
+        except Exception as e:
+            logging.error(f"获取模型列表时发生错误: {e}")
+            return ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo-preview", "deepseek-chat"]
 
 class GeminiAdapter(BaseLLMAdapter):
     """
@@ -193,6 +261,15 @@ class OllamaAdapter(BaseLLMAdapter):
             logging.warning("No response from OllamaAdapter.")
             return ""
         return response.content
+    
+    def _fetch_models(self) -> list:
+        try:
+            response = requests.get(f"{self.base_url.replace('/v1', '')}/api/tags")
+            if response.status_code == 200:
+                return [model["name"] for model in response.json()["models"]]
+        except Exception as e:
+            logging.error(f"获取Ollama模型列表失败: {e}")
+        return ["llama2", "mistral", "codellama"]
 
 class MLStudioAdapter(BaseLLMAdapter):
     def __init__(self, api_key: str, base_url: str, model_name: str, max_tokens: int, temperature: float = 0.7, timeout: Optional[int] = 600):
