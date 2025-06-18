@@ -85,7 +85,7 @@ def build_ai_config_tab(self):
                 "OpenAI": {"base_url": "https://api.openai.com/v1"},
                 "Azure OpenAI": {"base_url": "https://[az].openai.azure.com/openai/deployments/[model]/chat/completions?api-version=2024-08-01-preview"},
                 "DeepSeek": {"base_url": "https://api.deepseek.com/v1"},
-                "Gemini": {"base_url": ""},
+                "Gemini": {"base_url": "https://generativelanguage.googleapis.com/v1"},  # 修改这里
                 "Azure AI": {"base_url": "https://<your-endpoint>.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview"},
                 "阿里云百炼": {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
                 "火山引擎": {"base_url": "https://ark.cn-beijing.volces.com/api/v3"},
@@ -159,8 +159,13 @@ def build_ai_config_tab(self):
                 api_key = self_ref.api_key_var.get().strip()
                 base_url = self_ref.base_url_var.get().strip()
                 
-                if not api_key or not base_url:
-                    return
+                # 修改这里：对于 Gemini，只需要检查 API Key
+                if interface_format.lower() == "gemini":
+                    if not api_key:
+                        return
+                else:
+                    if not api_key or not base_url:
+                        return
                 
                 # 保存当前模型名称
                 current_model = self_ref.model_name_var.get().strip()

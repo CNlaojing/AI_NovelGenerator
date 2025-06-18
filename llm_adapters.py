@@ -172,18 +172,24 @@ class GeminiAdapter(BaseLLMAdapter):
         self.temperature = temperature
         self.timeout = timeout
 
-        self._client = genai.Client(api_key=self.api_key)
+        try:
+            # 配置 genai
+            genai.configure(api_key=self.api_key)
+            # 获取模型实例
+            self._model = genai.GenerativeModel(self.model_name)
+        except Exception as e:
+            logging.error(f"初始化 Gemini 适配器失败: {e}")
+            raise
 
     def invoke(self, prompt: str) -> str:
         try:
-            response = self._client.models.generate_content(
-                model = self.model_name,
-                contents = prompt,
-                config = genai.types.GenerateContentConfig(
+            # 使用新的 API 调用方式
+            response = self._model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
                     max_output_tokens=self.max_tokens,
                     temperature=self.temperature,
-                ),
-                timeout=self.timeout  # 添加超时参数
+                )
             )
             if response and response.text:
                 return response.text
@@ -193,6 +199,31 @@ class GeminiAdapter(BaseLLMAdapter):
         except Exception as e:
             logging.error(f"Gemini API 调用失败: {e}")
             return ""
+    
+    def _fetch_models(self) -> list:
+        """获取 Gemini 可用模型列表"""
+        try:
+            logging.info("正在获取 Gemini 模型列表...")
+            genai.configure(api_key=self.api_key)
+            available_models = []
+            models = genai.list_models()
+            logging.info(f"Gemini API 返回模型列表: {models}")
+            
+            for m in models:
+                # 只返回支持文本生成的模型
+                if 'generateContent' in m.supported_generation_methods:
+                    available_models.append(m.name)
+            
+            if available_models:
+                logging.info(f"找到可用的 Gemini 模型: {available_models}")
+                return available_models
+            else:
+                logging.warning("未找到支持文本生成的 Gemini 模型，使用默认值")
+                return ["gemini-pro"]
+                
+        except Exception as e:
+            logging.error(f"获取 Gemini 模型列表失败: {e}")
+            return ["gemini-pro"]
 
 class AzureOpenAIAdapter(BaseLLMAdapter):
     """
@@ -456,7 +487,15 @@ def create_llm_adapter(
     fmt = interface_format.strip().lower()
     adapter = None
     
-    if fmt == "deepseek":
+    if fmt == "gemini":
+        # 对于 Gemini，使用默认 base_url
+        if not base_url:
+            base_url = "https://generativelanguage.googleapis.com/v1"
+        # 如果未指定 model_name，使用默认值
+        if not model_name:
+            model_name = "gemini-pro"
+        adapter = GeminiAdapter(api_key, model_name, max_tokens, temperature, timeout)
+    elif fmt == "deepseek":
         adapter = DeepSeekAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "openai":
         adapter = OpenAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
@@ -468,9 +507,6 @@ def create_llm_adapter(
         adapter = OllamaAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "ml studio":
         adapter = MLStudioAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
-    elif fmt == "gemini":
-        # base_url 对 Gemini 暂无用处，可忽略
-        adapter = GeminiAdapter(api_key, model_name, max_tokens, temperature, timeout)
     elif fmt == "阿里云百炼":
         adapter = OpenAIAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)
     elif fmt == "火山引擎":
