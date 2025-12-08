@@ -1,0 +1,457 @@
+#novel_generator/common.py
+# -*- coding: utf-8 -*-
+"""通用重试、清洗、日志工具"""
+import logging
+import re
+import time
+import traceback
+import threading
+import queue
+import sys
+import sys
+
+def call_with_retry(func, max_retries=3, sleep_time=2, fallback_return=None, **kwargs):
+    """通用的重试机制封装。
+    :param func: 要执行的函数
+    :param max_retries: 最大重试次数
+    :param sleep_time: 重试前的等待秒数
+    :param fallback_return: 如果多次重试仍失败时的返回值
+    :param kwargs: 传给func的命名参数
+    :return: func的结果，若失败则返回 fallback_return
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            return func(**kwargs)
+        except Exception as e:
+            logging.warning(f"[call_with_retry] Attempt {attempt} failed with error: {e}")
+            traceback.print_exc()
+            if attempt < max_retries:
+                time.sleep(sleep_time)
+            else:
+                logging.error("Max retries reached, returning fallback_return.")
+                return fallback_return
+
+def remove_think_tags(text: str) -> str:
+    """移除 <think>...</think> 包裹的内容"""
+    return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+
+def debug_log(prompt: str, response_content: str):
+    logging.info(
+        f"\n[#########################################  Prompt  #########################################]\n{prompt}\n"
+    )
+    logging.info(
+        f"\n[######################################### Response #########################################]\n{response_content}\n"
+    )
+
+def stream_print(text: str, end: str = "", thinking: bool = False):
+    """流式打印文本，直接按照LLM返回的token速度显示
+    Args:
+        text: 要打印的文本
+        end: 结束字符
+        thinking: 是否是思维链内容
+    """
+    if not text:
+        return
+        
+    prefix = "💭 " if thinking else "🤖 "
+    
+    # 确保text是字符串类型
+    text_str = str(text)
+    
+    # 仅在新段落开始时添加前缀
+    if text_str.startswith('\n'):
+        sys.__stdout__.write(prefix)
+    
+    # 直接打印文本，让token自然流出
+    sys.__stdout__.write(text_str)
+    sys.__stdout__.write(end)
+    sys.__stdout__.flush()
+
+def extract_thinking_content(response_chunk):
+    """从不同模型的响应中提取思维链内容
+    Returns:
+        tuple: (思维链内容, 最终回答)
+    """
+    thinking_content = None
+    content = None
+    
+    # DeepSeek模型
+    if hasattr(response_chunk, 'choices') and response_chunk.choices and hasattr(response_chunk.choices[0].delta, 'reasoning_content'):
+        thinking_content = response_chunk.choices[0].delta.reasoning_content
+        content = response_chunk.choices[0].delta.content
+        
+    # Gemini模型
+    elif hasattr(response_chunk, 'parts') and response_chunk.parts:
+        # Gemini的思维链在candidates中
+        candidates = getattr(response_chunk, 'candidates', [])
+        if candidates:
+            thinking_content = str(candidates[0].content)
+        content = str(getattr(response_chunk, 'text', ''))
+        
+    # OpenAI模型
+    elif hasattr(response_chunk, 'choices') and response_chunk.choices:
+        content = response_chunk.choices[0].delta.content
+        if content and '<think>' in content:
+            thinking_match = re.search(r'<think>(.*?)</think>', content)
+            if thinking_match:
+                thinking_content = thinking_match.group(1)
+                content = re.sub(r'<think>.*?</think>', '', content)
+    
+    return thinking_content, content
+
+def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3, check_interrupted=None, log_func=None) -> str:
+    """使用流式输出调用 LLM 并清理返回结果"""
+    result_text = ""
+    for chunk in invoke_stream_with_cleaning(llm_adapter, prompt, max_retries, check_interrupted, log_func):
+        result_text += chunk
+    return result_text
+
+def invoke_stream_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3, check_interrupted=None, log_func=None):
+    """
+    使用流式输出调用 LLM，并以生成器方式返回清理后的文本块。
+    增加了在LLM思考时的读秒计时功能，并能在GUI日志中反映。
+    """
+    sys.__stdout__.write("\n" + "="*70 + "\n")
+    sys.__stdout__.write("发送到 LLM 的提示词:\n")
+    sys.__stdout__.write("-"*70 + "\n")
+    sys.__stdout__.write(prompt + "\n")
+    sys.__stdout__.write("="*70 + "\n\n")
+    sys.__stdout__.flush()
+
+    retry_count = 0
+    while retry_count < max_retries:
+        stop_event = threading.Event()
+        timer_thread = None
+        
+        final_elapsed_time = 0
+        def _timer():
+            nonlocal final_elapsed_time
+            start_time = time.time()
+
+            while not stop_event.is_set():
+                elapsed = time.time() - start_time
+                final_elapsed_time = elapsed
+                
+                message = f"LLM 正在思考...  （{elapsed:.1f} 秒）"
+                
+                # 更新终端计时器
+                sys.__stdout__.write(f"\r{message}")
+                sys.__stdout__.flush()
+                
+                # 更新GUI日志
+                if log_func:
+                    # 对于计时器，总是替换最后一行
+                    log_func(message, replace_last_line=True)
+                
+                time.sleep(0.1)
+            
+            # 计时结束，在终端和GUI打印最终耗时
+            final_message = f"LLM 思考完毕，共耗时 {final_elapsed_time:.2f} 秒"
+            sys.__stdout__.write(f"\r{final_message}\n")
+            sys.__stdout__.flush()
+            if log_func:
+                log_func(final_message, replace_last_line=True)
+
+        try:
+            if check_interrupted and check_interrupted():
+                yield "任务已中断"
+                return
+
+            # 启动计时器
+            timer_thread = threading.Thread(target=_timer)
+            timer_thread.daemon = True
+            timer_thread.start()
+
+            stream = llm_adapter.invoke_stream(prompt)
+            if not stream:
+                raise Exception("Failed to get stream response")
+
+            first_chunk = True
+            for chunk in stream:
+                if first_chunk:
+                    # 收到第一个数据块，停止计时器
+                    stop_event.set()
+                    timer_thread.join()
+                    sys.__stdout__.write("\n" + "="*70 + "\n")
+                    sys.__stdout__.write("LLM返回内容:\n")
+                    sys.__stdout__.write("-"*70 + "\n")
+                    sys.__stdout__.flush()
+                    first_chunk = False
+
+                if check_interrupted and check_interrupted():
+                    yield "任务已中断"
+                    return
+                
+                content = chunk
+                
+                if content:
+                    sys.__stdout__.write(content)
+                    sys.__stdout__.flush()
+                    
+                    # 将流式内容也输出到GUI日志
+                    # if log_func:
+                    #     log_func(content, stream=True)
+                        
+                    cleaned_content = content.replace("```", "")
+                    yield cleaned_content
+            
+            if not first_chunk: # 确保即使流为空也打印结束符
+                sys.__stdout__.write("\n" + "="*70 + "\n")
+                sys.__stdout__.flush()
+            
+            return
+
+        except Exception as e:
+            error_message = f"调用失败 ({retry_count + 1}/{max_retries}): {str(e)}"
+            sys.__stdout__.write(f"\n错误: {error_message}\n")
+            sys.__stdout__.flush()
+            logging.error(error_message)
+            
+            retry_count += 1
+            if retry_count >= max_retries:
+                final_error = f"\n错误：LLM调用失败，已达最大重试次数: {e}"
+                sys.__stdout__.write(final_error + "\n")
+                sys.__stdout__.flush()
+                yield final_error
+                return
+            time.sleep(2)
+        finally:
+            # 确保计时器线程在任何情况下都能停止
+            if timer_thread and timer_thread.is_alive():
+                stop_event.set()
+                timer_thread.join()
+
+def invoke_llm(llm_adapter, prompt: str, max_retries: int = 3, log_func=None) -> str:
+    """直接调用 LLM 并返回结果，包含重试机制。"""
+    # 复用 invoke_with_cleaning 的逻辑
+    return invoke_with_cleaning(llm_adapter, prompt, max_retries, log_func=log_func)
+
+# 添加异步版本的LLM调用函数
+class AsyncLLMInvoker:
+    """异步LLM调用器，使用线程池和回调机制实现非阻塞调用"""
+    
+    def __init__(self, max_workers=5):
+        """初始化异步调用器
+        
+        Args:
+            max_workers: 最大工作线程数
+        """
+        self.result_queues = {}
+        self.max_workers = max_workers
+        self.workers = []
+        self.task_queue = queue.Queue()
+        self._start_workers()
+    
+    def _start_workers(self):
+        """启动工作线程"""
+        for _ in range(self.max_workers):
+            worker = threading.Thread(target=self._worker_loop, daemon=True)
+            worker.start()
+            self.workers.append(worker)
+    
+    def _worker_loop(self):
+        """工作线程循环，从任务队列获取任务并执行"""
+        while True:
+            try:
+                task_id, llm_adapter, prompt, max_retries, callback = self.task_queue.get()
+                try:
+                    # 调用同步版本的invoke_llm函数
+                    result = invoke_llm(llm_adapter, prompt, max_retries)
+                    # 如果提供了回调函数，则调用回调
+                    if callback:
+                        callback(result)
+                except Exception as e:
+                    logging.error(f"Error in worker thread: {str(e)}")
+                    if callback:
+                        callback(None, str(e))
+                finally:
+                    self.task_queue.task_done()
+            except Exception as e:
+                logging.error(f"Worker loop error: {str(e)}")
+    
+    def invoke_async(self, llm_adapter, prompt, callback=None, max_retries=3):
+        """异步调用LLM
+        
+        Args:
+            llm_adapter: LLM适配器
+            prompt: 提示词
+            callback: 回调函数，接收结果和可选的错误信息
+            max_retries: 最大重试次数
+        """
+        task_id = id(prompt)
+        self.task_queue.put((task_id, llm_adapter, prompt, max_retries, callback))
+        return task_id
+
+# 创建全局异步调用器实例
+async_invoker = AsyncLLMInvoker()
+
+def invoke_llm_async(llm_adapter, prompt, callback=None, max_retries=3):
+    """异步调用LLM的便捷函数
+    
+    Args:
+        llm_adapter: LLM适配器
+        prompt: 提示词
+        callback: 回调函数，接收结果和可选的错误信息
+        max_retries: 最大重试次数
+    """
+    return async_invoker.invoke_async(llm_adapter, prompt, callback, max_retries)
+
+def invoke_with_cleaning_async(llm_adapter, prompt, callback=None, max_retries=3):
+    """异步调用LLM并清理结果的便捷函数
+    
+    Args:
+        llm_adapter: LLM适配器
+        prompt: 提示词
+        callback: 回调函数，接收清理后的结果和可选的错误信息
+        max_retries: 最大重试次数
+    """
+    def clean_and_callback(result, error=None):
+        if error:
+            if callback:
+                callback(None, error)
+            return
+        
+        # 清理结果
+        cleaned_result = result.replace("```", "").strip() if result else ""
+        if callback:
+            callback(cleaned_result)
+    
+    return async_invoker.invoke_async(llm_adapter, prompt, clean_and_callback, max_retries)
+
+# 添加异步版本的update_character_states函数
+def update_character_states_async(chapter_text, chapter_title, chap_num, filepath, llm_adapter, embedding_adapter, chapter_blueprint_content="", callback=None, log_func=None):
+    """异步版本的角色状态更新函数
+    
+    Args:
+        chapter_text: 章节文本
+        chapter_title: 章节标题
+        chap_num: 章节编号
+        filepath: 文件保存路径
+        llm_adapter: LLM适配器
+        embedding_adapter: 嵌入适配器
+        chapter_blueprint_content: 章节目录内容
+        callback: 回调函数，接收更新结果和可选的错误信息
+        log_func: 日志记录函数
+    """
+    def task():
+        try:
+            from novel_generator.character_state_updater import update_character_states
+            result = update_character_states(chapter_text, chapter_title, chap_num, filepath, llm_adapter, embedding_adapter, chapter_blueprint_content, log_func=log_func)
+            if callback:
+                callback(result)
+        except Exception as e:
+            logging.error(f"Error in update_character_states_async: {str(e)}")
+            if callback:
+                callback({"status": "error", "message": str(e), "character_state": ""})
+    
+    thread = threading.Thread(target=task)
+    thread.daemon = True
+    thread.start()
+    return thread
+
+def execute_with_polling(gui_app, step_name: str, target_func, *args, **kwargs):
+    """
+    执行一个目标函数，并在LLM调用失败时使用轮询管理器进行重试。
+    这是实现模型自动切换的核心逻辑。
+
+    :param gui_app: 主GUI应用的实例，用于日志记录。
+    :param step_name: 当前执行的步骤名称 (例如, '生成初稿', '重写')。
+    :param target_func: 要执行的目标函数 (例如, generate_chapter_draft_logic)。
+    :param args: 传递给目标函数的位置参数。
+    :param kwargs: 传递给目标函数的关键字参数。
+    :return: 目标函数的返回值，如果所有尝试都失败则返回None。
+    """
+    from llm_adapters import PollingManager
+    polling_manager = PollingManager()
+    
+    # 确定要使用的配置列表
+    step_config = polling_manager.step_configs.get(step_name, {})
+    specific_config_name = step_config.get("指定配置")
+    if specific_config_name and specific_config_name != "无":
+        effective_list = [{"name": specific_config_name}]
+    else:
+        effective_list = polling_manager.polling_list
+
+    if not effective_list:
+        gui_app.safe_log(f"错误：步骤 '{step_name}' 没有任何可用的LLM配置。")
+        return None
+
+    max_attempts = len(effective_list)
+
+    for attempt in range(max_attempts):
+        # 在每次循环开始时重置随机索引，以确保随机策略在重试时也能正确工作
+        if hasattr(polling_manager, '_random_indices'):
+            delattr(polling_manager, '_random_indices')
+
+        llm_adapter, config_name = polling_manager.get_adapter_for_step(step_name, attempt=attempt)
+
+        if not llm_adapter:
+            gui_app.safe_log(f"警告：无法为步骤 '{step_name}' 获取配置 '{config_name}'。")
+            continue
+
+        gui_app.safe_log(f"步骤 '{step_name}' 正在尝试使用配置 '{config_name}' (尝试 {attempt + 1}/{max_attempts})...")
+        
+        try:
+            # 将llm_adapter注入到kwargs中，供目标函数使用
+            kwargs['llm_adapter'] = llm_adapter
+            result = target_func(*args, **kwargs)
+            
+            # 假设如果函数成功执行但返回None或空字符串，也视为一种“软失败”
+            # 但这里我们信任目标函数自己的判断，只要不抛异常就算成功
+            gui_app.safe_log(f"✅ 步骤 '{step_name}' 使用配置 '{config_name}' 成功。")
+            return result
+        
+        except InterruptedError:
+            gui_app.safe_log(f"🟡 任务被用户中断。")
+            # 用户中断应该立即停止整个工作流
+            raise
+        except Exception as e:
+            error_msg = f"❌ 配置 '{config_name}' 在步骤 '{step_name}' 中失败: {str(e)}"
+            gui_app.safe_log(error_msg)
+            traceback.print_exc() # 打印详细的traceback到控制台/日志文件
+            
+            # 如果这是最后一次尝试，则记录最终的失败信息
+            if attempt == max_attempts - 1:
+                gui_app.safe_log(f"❌ 错误：步骤 '{step_name}' 已尝试所有可用配置，但均失败。")
+                return None # 或者可以抛出最终的异常
+    
+    return None # 所有尝试都失败了
+
+import os
+from utils import read_file
+
+def get_chapter_filepath(filepath: str, chapter_num: int) -> str:
+    """
+    根据章节号生成标准的文件路径，文件名格式为 "第X章 章节名.txt"。
+    章节名从 章节目录.txt 中提取。
+
+    :param filepath: 项目根目录的路径。
+    :param chapter_num: 章节号。
+    :return: 标准化的章节文件完整路径。
+    """
+    directory_file = os.path.join(filepath, "章节目录.txt")
+    chapter_title = f"无标题章节"  # 默认标题
+
+    if os.path.exists(directory_file):
+        directory_content = read_file(directory_file)
+        # 增强的正则表达式，可以匹配 "第X章 《章节名》" 或 "第X章 章节名"
+        match = re.search(rf"^第\s*{chapter_num}\s*章\s*(?:《([^》]+)》|([^\n]+))", directory_content, re.MULTILINE)
+        if match:
+            # match.group(1) 对应《章节名》，match.group(2) 对应 "章节名"
+            title_candidate = match.group(1) or match.group(2)
+            if title_candidate:
+                chapter_title = title_candidate.strip()
+
+    # 移除Windows文件名中的非法字符
+    safe_title = re.sub(r'[\\/*?:"<>|]', '', chapter_title)
+    
+    # 新的文件名格式
+    filename = f"第{chapter_num}章 {safe_title}.txt"
+    
+    # 新的文件夹名称
+    chapter_folder = os.path.join(filepath, "章节正文")
+    
+    # 确保文件夹存在
+    os.makedirs(chapter_folder, exist_ok=True)
+    
+    return os.path.join(chapter_folder, filename)
