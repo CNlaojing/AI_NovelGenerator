@@ -181,7 +181,7 @@
 1. **下载项目**  
 1.  **克隆或下载项目**
     ```
-    咨询UP
+    git clone https://github.com/CNlaojing/AI_NovelGenerator.git
     ```
 
 2. **安装编译工具（可选）**  
