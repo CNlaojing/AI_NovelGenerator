@@ -5,6 +5,9 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 from PyInstaller.utils.hooks import get_module_file_attribute
 from PyInstaller.building.datastruct import Tree
 
+SPEC_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+APP_VERSION = "1.7.4"
+
 def get_site_packages():
     """获取当前虚拟环境的site-packages路径"""
     venv_path = os.path.dirname(os.path.dirname(sys.executable))
@@ -36,15 +39,22 @@ def collect_package_data(package_name):
     return datas, binaries, hiddenimports
 
 # 收集基础文件
-datas = [
-    ('config.json', '.'),
-    ('LICENSE', '.'),
-    ('requirements.txt', '.'),
-    ('README.md', '.'),
-    ('icon.ico', '.'),
-    ('ui/ds.dat', 'ui'),
-    ('ui/轮询设定', 'ui/轮询设定'),
-]
+datas = []
+
+def add_local_data(relative_path, target_dir):
+    source_path = os.path.join(SPEC_DIR, relative_path)
+    if os.path.exists(source_path):
+        datas.append((source_path, target_dir))
+    else:
+        print(f"Warning: Local data not found, skipping: {source_path}")
+
+add_local_data('config.json', '.')
+add_local_data('LICENSE', '.')
+add_local_data('requirements.txt', '.')
+add_local_data('README.md', '.')
+add_local_data('icon.ico', '.')
+add_local_data(os.path.join('ui', 'ds.dat'), 'ui')
+add_local_data(os.path.join('ui', '轮询设定'), 'ui/轮询设定')
 
 # 收集customtkinter主题文件
 try:
@@ -126,7 +136,7 @@ all_datas.extend(datas)
 
 a = Analysis(
     ['main.py'],
-    pathex=['d:\\book\\AI_NovelGenerator'],
+    pathex=[SPEC_DIR],
     binaries=all_binaries,  # 使用收集到的binaries
     datas=all_datas,  # 使用合并后的all_datas
     hiddenimports=[
@@ -187,7 +197,7 @@ a = Analysis(
         'anthropic',
         'python-docx',
         'watchdog',
-        'typing-extensions',
+        'typing_extensions',
     ],
     hookspath=[],
     hooksconfig={},
@@ -217,7 +227,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='AI_NovelGenerator V1.7.3',
+    name=f'AI_NovelGenerator V{APP_VERSION}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -233,5 +243,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='AI_NovelGenerator V1.7.3'
+    name=f'AI_NovelGenerator V{APP_VERSION}'
 )

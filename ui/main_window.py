@@ -60,7 +60,7 @@ class NovelGeneratorGUI:
     def __init__(self, master):
         self.root = master
         self.master = master
-        self.master.title("Novel Generator GUI V1.7.3")
+        self.master.title("Novel Generator GUI V1.7.4")
         try:
             # 使用 stderr 重定向来捕获 libpng 警告 (已注释掉以排查终端乱码问题)
             # import sys

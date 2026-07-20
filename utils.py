@@ -3,6 +3,7 @@
 import os
 import json
 import re
+from datetime import datetime
 
 def read_file(filepath: str) -> str:
     """读取文件内容"""
@@ -58,6 +59,151 @@ def save_data_to_json(data: dict, file_path: str) -> bool:
 def ensure_unix_lf(text: str) -> str:
     """确保文本使用Unix风格的换行符"""
     return text.replace('\r\n', '\n').replace('\r', '\n')
+
+def strip_markdown_fences(text: str) -> str:
+    """移除AI输出中常见的Markdown代码块围栏。"""
+    if not text:
+        return ""
+    return re.sub(r'^\s*```[a-zA-Z0-9_-]*\s*$|^\s*```\s*$', '', text, flags=re.MULTILINE)
+
+def normalize_generated_text(text: str) -> str:
+    """
+    对AI生成文本做基础、安全的版式修复。
+    只处理换行和代码块围栏等低风险问题，不做语义猜测。
+    """
+    if text is None:
+        return ""
+
+    normalized = ensure_unix_lf(str(text)).replace('\ufeff', '')
+    normalized = strip_markdown_fences(normalized)
+    normalized = re.sub(r'\n{3,}', '\n\n', normalized)
+    return normalized.strip()
+
+def save_failed_generation_sample(project_path: str, sample_name: str, content: str, extension: str = "txt") -> str:
+    """将校验失败的AI原始输出保存到调试目录，便于排查。"""
+    debug_dir = os.path.join(project_path, "debug", "failed_generations")
+    os.makedirs(debug_dir, exist_ok=True)
+
+    safe_extension = extension.lstrip('.') or "txt"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_path = os.path.join(debug_dir, f"{sample_name}_失败样本_{timestamp}.{safe_extension}")
+    save_string_to_txt(content or "", file_path)
+    return file_path
+
+def normalize_chapter_directory_text(text: str) -> str:
+    """对章节目录文本做低风险版式规范化。"""
+    normalized = normalize_generated_text(text)
+    if not normalized:
+        return ""
+
+    # 避免章节标题被压在同一行，且排除“第X章前必须回收”这种正文描述。
+    normalized = re.sub(
+        r'(?<!\n)(第\s*\d+\s*章)(?=\s*(?!前)(?:\[|《|【|「|[A-Za-z0-9\u4e00-\u9fff]))',
+        r'\n\1',
+        normalized
+    )
+
+    top_level_fields = [
+        "本章定位", "核心作用", "叙事视角", "场景设定", "出场角色与动机",
+        "情节脉络（起-承-转-合）", "悬念类型", "情绪演变", "伏笔条目", "颠覆指数", "本章简述"
+    ]
+    top_level_pattern = "|".join(re.escape(field) for field in top_level_fields)
+    normalized = re.sub(
+        rf'(?<!\n)([├└]─(?:{top_level_pattern})：)',
+        r'\n\1',
+        normalized
+    )
+
+    normalized = re.sub(r'(?<!\n)(│[├└]─)', r'\n\1', normalized)
+    normalized = re.sub(r'\n{3,}', '\n\n', normalized).strip()
+    return normalized
+
+def validate_chapter_directory_text(text: str, start_chapter: int = None, end_chapter: int = None) -> tuple:
+    """校验章节目录是否满足后续解析的基本要求。"""
+    normalized = normalize_chapter_directory_text(text)
+    if not normalized:
+        return False, "章节目录内容为空"
+
+    if re.search(
+        r'[^\n](第\s*\d+\s*章)(?=\s*(?!前)(?:\[|《|【|「|[A-Za-z0-9\u4e00-\u9fff]))',
+        normalized
+    ):
+        return False, "检测到未独占一行的章节标题"
+
+    chapter_matches = list(re.finditer(r'^第\s*(\d+)\s*章\b.*$', normalized, re.MULTILINE))
+    if not chapter_matches:
+        return False, "未找到任何章节标题"
+
+    chapter_numbers = [int(match.group(1)) for match in chapter_matches]
+    if start_chapter is not None and end_chapter is not None:
+        expected_numbers = list(range(start_chapter, end_chapter + 1))
+        if chapter_numbers != expected_numbers:
+            return False, f"章节号不连续或范围不匹配，实际为 {chapter_numbers}，预期为 {expected_numbers}"
+
+    required_fields = ["├─本章定位：", "├─核心作用：", "├─伏笔条目：", "├─颠覆指数：", "└─本章简述："]
+    for index, match in enumerate(chapter_matches):
+        chunk_start = match.start()
+        chunk_end = chapter_matches[index + 1].start() if index + 1 < len(chapter_matches) else len(normalized)
+        chapter_chunk = normalized[chunk_start:chunk_end]
+        missing_fields = [field for field in required_fields if field not in chapter_chunk]
+        if missing_fields:
+            return False, f"第{chapter_numbers[index]}章缺少关键字段: {', '.join(missing_fields)}"
+
+    return True, "章节目录格式校验通过"
+
+def normalize_volume_outline_text(text: str) -> str:
+    """对分卷大纲文本做低风险版式规范化。"""
+    normalized = normalize_generated_text(text)
+    if not normalized:
+        return ""
+
+    normalized = re.sub(r'(?<!\n)([一二三四五六七八九十]+、)', r'\n\1', normalized)
+    normalized = re.sub(r'(?<!\n)(\*\s+)', r'\n\1', normalized)
+    normalized = re.sub(r'章节范围\s*[:：]\s*第\s*(\d+)\s*章\s*至\s*第\s*(\d+)\s*章', r'章节范围：第\1章-第\2章', normalized)
+    normalized = re.sub(r'章节范围\s*[:：]\s*第\s*(\d+)\s*章\s*[—\-~]+\s*第\s*(\d+)\s*章', r'章节范围：第\1章-第\2章', normalized)
+    normalized = re.sub(r'\n{3,}', '\n\n', normalized).strip()
+    return normalized
+
+def extract_volume_outline_range(text: str) -> tuple:
+    """从分卷大纲中提取章节范围。"""
+    normalized = normalize_volume_outline_text(text)
+    patterns = [
+        r'章节范围\s*[:：]\s*第\s*(\d+)\s*章\s*[-—~至]+\s*第\s*(\d+)\s*章',
+        r'章节范围\s*[:：]\s*(\d+)\s*[-—~至]+\s*(\d+)',
+        r'章节分布\s*[:：]\s*第\s*(\d+)\s*章\s*[-—~至]+\s*第\s*(\d+)\s*章',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, normalized, re.DOTALL)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+    return None, None
+
+def validate_volume_outline_text(text: str, expected_volume_number: int = None) -> tuple:
+    """校验分卷大纲是否包含关键结构。"""
+    normalized = normalize_volume_outline_text(text)
+    if not normalized:
+        return False, "分卷大纲内容为空"
+
+    required_sections = ["一、分卷使命", "二、世界观与冲突", "三、情节线与主角进程", "四、核心角色发展", "五、叙事与章节规划"]
+    missing_sections = [section for section in required_sections if section not in normalized]
+    if missing_sections:
+        return False, f"分卷大纲缺少关键模块: {', '.join(missing_sections)}"
+
+    start_chap, end_chap = extract_volume_outline_range(normalized)
+    if start_chap is None or end_chap is None:
+        return False, "未找到可解析的章节范围"
+    if start_chap > end_chap:
+        return False, f"章节范围无效: 第{start_chap}章-第{end_chap}章"
+
+    if expected_volume_number is not None:
+        heading_patterns = [
+            rf'===\s*第\s*{expected_volume_number}\s*卷',
+            rf'#===\s*第\s*{expected_volume_number}\s*卷',
+        ]
+        if not any(re.search(pattern, normalized) for pattern in heading_patterns):
+            return False, f"未找到第{expected_volume_number}卷标题"
+
+    return True, "分卷大纲格式校验通过"
 
 def reformat_novel_text(
     text: str,

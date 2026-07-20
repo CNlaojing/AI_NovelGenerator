@@ -8,7 +8,15 @@ from prompt_definitions import (
     final_volume_prompt,
     volume_design_format
 )
-from utils import read_file, save_string_to_txt, clear_file_content
+from utils import (
+    read_file,
+    save_string_to_txt,
+    clear_file_content,
+    normalize_volume_outline_text,
+    validate_volume_outline_text,
+    extract_volume_outline_range,
+    save_failed_generation_sample,
+)
 from novel_generator.json_utils import load_store # 替换导入
 import re
 
@@ -262,7 +270,7 @@ def Novel_volume_generate(
     existing_volume_outlines = []
     current_volume = 0
     if os.path.exists(volume_file):
-        content = read_file(volume_file)
+        content = normalize_volume_outline_text(read_file(volume_file))
         if content.strip():
             # 过滤掉分割后可能产生的空字符串
             all_volumes = [v for v in content.split("\n\n") if v.strip()]
@@ -405,26 +413,22 @@ def Novel_volume_generate(
             if not outline.strip():
                 raise Exception(f"第{i+1}卷大纲生成失败")
 
-            # 从生成的大纲中动态提取真实的章节范围
-            # 增强的正则表达式，以适应LLM可能产生的格式变化（例如，可选的空格和markdown列表标记）
-            distribution_match = re.search(r'五、\s*(?:叙事与章节规划|章节分布)[\s\S]*?(?:[\*\-]\s*)?(?:章节范围|章节分布)\s*[:：]\s*第(\d+)章\s*-\s*第(\d+)章', outline, re.DOTALL)
-            
-            if distribution_match:
-                try:
-                    real_start_chap = int(distribution_match.group(1))
-                    real_end_chap = int(distribution_match.group(2))
-                    _log(f"从生成的大纲中成功提取第 {i+1} 卷的真实章节范围: {real_start_chap}-{real_end_chap}")
-                except (ValueError, IndexError):
-                    _log(f"❌ 解析第 {i+1} 卷大纲中的章节范围失败，尽管找到了匹配项。请检查生成内容的格式。")
-                    raise ValueError(f"无法从生成的大纲中解析第 {i+1} 卷的章节范围数字。")
-            else:
-                _log(f"❌ 在第 {i+1} 卷生成的大纲中未能找到'五、叙事与章节规划'下的'章节范围'。无法创建分卷头。")
-                raise ValueError(f"无法从生成的大纲中找到第 {i+1} 卷的章节范围信息。")
+            normalized_outline = normalize_volume_outline_text(outline)
+            is_valid, validation_message = validate_volume_outline_text(normalized_outline)
+            if not is_valid:
+                sample_path = save_failed_generation_sample(filepath, "分卷大纲", outline, extension="txt")
+                raise ValueError(
+                    f"第 {i+1} 卷大纲格式校验失败：{validation_message}。"
+                    f" 原始返回已保存到 {sample_path}"
+                )
+
+            real_start_chap, real_end_chap = extract_volume_outline_range(normalized_outline)
+            _log(f"从生成的大纲中成功提取第 {i+1} 卷的真实章节范围: {real_start_chap}-{real_end_chap}")
 
             volume_title = "终章" if i == volume_count - 1 else ""
-            new_volume = f"#=== 第{i+1}卷{volume_title}  第{real_start_chap}章 至 第{real_end_chap}章 ===\n{outline}"
+            new_volume = f"#=== 第{i+1}卷{volume_title}  第{real_start_chap}章 至 第{real_end_chap}章 ===\n{normalized_outline}"
             volume_outlines.append(new_volume)
-            previous_outline = outline
+            previous_outline = normalized_outline
             # 每生成一卷就保存一次
             current_content = "\n\n".join(volume_outlines) + "\n"
             save_string_to_txt(current_content, volume_file)
@@ -445,7 +449,7 @@ def get_current_volume_info(filepath: str, volume_count: int) -> tuple:
     current_volume = 0
     volume_file = os.path.join(filepath, "分卷大纲.txt")
     if os.path.exists(volume_file):
-        content = read_file(volume_file)
+        content = normalize_volume_outline_text(read_file(volume_file))
         if content.strip():
             volumes = content.split("\n\n")
             for vol in volumes:
@@ -463,6 +467,7 @@ def extract_volume_outline(content: str, volume_number: int) -> str:
     从完整的分卷大纲中提取指定卷的内容
     """
     try:
+        content = normalize_volume_outline_text(content)
         pattern = rf"#=== 第{volume_number}卷.*?(?=#=== 第\d+卷|$)"
         match = re.search(pattern, content, re.DOTALL)
         if match:
@@ -480,6 +485,8 @@ def find_volume_for_chapter(volume_content: str, chapter_number: int) -> int:
     if not volume_content:
         return 1  # 默认为第一卷
 
+    volume_content = normalize_volume_outline_text(volume_content)
+
     # 将内容按卷分割
     volume_blocks = re.split(r'(?=#=== 第\d+卷)', volume_content)
 
@@ -496,7 +503,11 @@ def find_volume_for_chapter(volume_content: str, chapter_number: int) -> int:
         start_chap, end_chap = None, None
 
         # 优先尝试从 "五、章节分布" 提取章节范围
-        distribution_match = re.search(r'五、章节分布.*?【章节范围】：第(\d+)章\s*-\s*第(\d+)章', block, re.DOTALL)
+        distribution_match = re.search(
+            r'五、(?:章节分布|叙事与章节规划).*?(?:【)?(?:章节范围|章节分布)(?:】)?\s*[:：]\s*第(\d+)章\s*[-—~至]+\s*第(\d+)章',
+            block,
+            re.DOTALL
+        )
         if distribution_match:
             try:
                 start_chap = int(distribution_match.group(1))

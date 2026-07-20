@@ -227,10 +227,10 @@ class DeepSeekAdapter(BaseLLMAdapter):
             max_tokens=self.max_tokens
         )
         for chunk in response:
-            # 增加更严格的检查，忽略None, 空字符串, 或仅包含空格的块
+            # 保留仅包含换行的分片，避免结构化文本在流式拼接时丢失行边界
             if chunk.choices:
                 content = chunk.choices[0].delta.content
-                if content is not None and content.strip():
+                if content is not None and content != "":
                     yield content
 
     def _fetch_models(self) -> list:
@@ -300,10 +300,10 @@ class OpenAIAdapter(BaseLLMAdapter):
         )
         for chunk in response:
             try:
-                # 增加更严格的检查，忽略None, 空字符串, 或仅包含空格的块
+                # 保留仅包含换行的分片，避免结构化文本在流式拼接时丢失行边界
                 if chunk.choices:
                     content = chunk.choices[0].delta.content
-                    if content is not None and content.strip():
+                    if content is not None and content != "":
                         yield content
             except IndexError:
                 logging.debug("OpenAI API 流式响应中遇到一个不含内容的块，已忽略。")
@@ -373,7 +373,7 @@ class GeminiAdapter(BaseLLMAdapter):
             try:
                 # 使用 try-except 块来优雅地处理可能出现的 IndexError
                 # 当 chunk.candidates 为空列表时，访问 chunk.text 会触发此错误
-                if chunk.text and chunk.text.strip():
+                if chunk.text is not None and chunk.text != "":
                     yield chunk.text
             except IndexError:
                 # 这是一个预期的行为，当API发送一个空的候选列表（例如，因为安全设置）时会发生
@@ -561,7 +561,7 @@ class VolcanoEngineAIAdapter(BaseLLMAdapter): # Inherits from BaseLLMAdapter
             try:
                 if chunk.choices:
                     content = chunk.choices[0].delta.content
-                    if content is not None and content.strip():
+                    if content is not None and content != "":
                         yield content
             except IndexError:
                 logging.debug("VolcanoEngine API 流式响应中遇到一个不含内容的块，已忽略。")

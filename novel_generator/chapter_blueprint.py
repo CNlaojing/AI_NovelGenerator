@@ -9,7 +9,15 @@ from novel_generator.common import invoke_stream_with_cleaning
 from llm_adapters import create_llm_adapter
 from novel_generator.volume import extract_volume_outline
 from prompt_definitions import chapter_blueprint_prompt
-from utils import read_file, save_string_to_txt, clear_file_content
+from utils import (
+    read_file,
+    save_string_to_txt,
+    clear_file_content,
+    normalize_chapter_directory_text,
+    normalize_volume_outline_text,
+    validate_chapter_directory_text,
+    save_failed_generation_sample,
+)
 
 def analyze_directory_status(filepath: str) -> tuple:
     """分析目录文件状态，返回最新章节号"""
@@ -18,7 +26,7 @@ def analyze_directory_status(filepath: str) -> tuple:
         if not os.path.exists(directory_file):
             return 0, [], []
             
-        content = read_file(directory_file)
+        content = normalize_chapter_directory_text(read_file(directory_file))
         if not content:
             return 0, [], []
             
@@ -63,7 +71,7 @@ def analyze_volume_range(filepath: str) -> list:
         if not os.path.exists(volume_file):
             return []
             
-        content = read_file(volume_file)
+        content = normalize_volume_outline_text(read_file(volume_file))
         if not content:
             return []
             
@@ -968,7 +976,20 @@ def generate_volume_chapters(
         if not result or not result.strip():
             raise ValueError("LLM返回内容为空")
 
-        return result
+        normalized_result = normalize_chapter_directory_text(result)
+        is_valid, validation_message = validate_chapter_directory_text(
+            normalized_result,
+            start_chapter=start_chapter,
+            end_chapter=end_chapter
+        )
+        if not is_valid:
+            sample_path = save_failed_generation_sample(filepath, "章节目录", result, extension="txt")
+            raise ValueError(
+                f"章节目录格式校验失败：{validation_message}。"
+                f" 原始返回已保存到 {sample_path}"
+            )
+
+        return normalized_result
 
     except Exception as e:
         error_msg = f"生成章节内容时出错: {str(e)}"

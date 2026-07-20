@@ -4,7 +4,11 @@ import customtkinter as ctk
 import logging
 import sys
 import os
-from langchain.globals import set_verbose
+
+try:
+    from langchain_core.globals import set_verbose
+except ImportError:
+    from langchain.globals import set_verbose
 
 # 关闭 langchain 的 verbose 日志
 set_verbose(False)
