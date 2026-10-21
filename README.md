@@ -3,8 +3,8 @@
   **打包项目下载**<br>
     - 自行打包<br>
     - 关注加一键三连后咨询UP<br>
-    - 淘宝店铺购买<br>
-    - 群友互助，Q群：1039191350<br>
+    - 最新动态，Q群：1039191350<br>
+    - 新版：https://aiscxs.com<br>
 
 # AI_NovelGenerator (CNlaojing Fork)  
 > 基于 YILING0013/AI_NovelGenerator 的中文本地化增强版本，新增多模型适配与向量库优化功能  
